@@ -11,13 +11,27 @@ import subprocess
 import tempfile
 
 
+# The base filesystem package owns the directories every distribution shares,
+# and the icon theme package owns the hicolor icon directories, so a package
+# that claims them cannot be installed next to them. Only the directories the
+# product owns itself are packaged as directories; every other directory is
+# created by the distribution.
+OWNED_ROOTS = ('/opt/oink', '/usr/share/doc/oink')
+
+
+def _owned_directory(name):
+    """Whether the package owns this directory of the staged tree."""
+    return any(name == root or name.startswith(root + '/') for root in OWNED_ROOTS)
+
+
 def _files(root):
-    """The %files list: every packaged path, directories marked as such."""
+    """The %files list: every packaged path, owned directories marked as such."""
     lines = []
     for path in sorted(root.rglob('*')):
         name = '/' + path.relative_to(root).as_posix()
         if path.is_dir():
-            lines.append(f'%dir {name}')
+            if _owned_directory(name):
+                lines.append(f'%dir {name}')
         else:
             lines.append(name)
     return lines

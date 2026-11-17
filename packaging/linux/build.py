@@ -47,9 +47,11 @@ def host_path(root, relative):
 # RPM names differ between Fedora/RHEL and openSUSE as well.
 DEBIAN_DEPENDS = ('libc6, libgtk-3-0, libwebkit2gtk-4.1-0, libayatana-appindicator3-1, '
                    'libasound2t64 | libasound2')
-RPM_REQUIRES = ('gtk3 or libgtk-3-0',
-                'webkit2gtk4.1 or webkit2gtk-4.1',
-                'libayatana-appindicator or libayatana-appindicator3',
+# RPM reads "a or b" as three separate package names, so the alternative
+# needs its own parentheses to become a rich dependency.
+RPM_REQUIRES = ('(gtk3 or libgtk-3-0)',
+                '(webkit2gtk4.1 or webkit2gtk-4.1)',
+                '(libayatana-appindicator or libayatana-appindicator3)',
                 'alsa-lib')
 DEBIAN_ARCHITECTURES = {'x64': 'amd64', 'arm64': 'arm64'}
 RPM_ARCHITECTURES = {'x64': 'x86_64', 'arm64': 'aarch64'}

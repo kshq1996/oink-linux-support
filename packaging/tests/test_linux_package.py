@@ -16,10 +16,12 @@ sys.path[:0] = [str(ROOT / 'packaging/linux'), str(ROOT / 'build-support')]
 DEB_SPEC = importlib.util.spec_from_file_location('linux_deb', ROOT / 'packaging/linux/deb.py')
 DEB = importlib.util.module_from_spec(DEB_SPEC)
 DEB_SPEC.loader.exec_module(DEB)
+RPM_SPEC = importlib.util.spec_from_file_location('linux_rpm', ROOT / 'packaging/linux/rpm.py')
+RPM = importlib.util.module_from_spec(RPM_SPEC)
+RPM_SPEC.loader.exec_module(RPM)
 SPEC = importlib.util.spec_from_file_location('linux_build', ROOT / 'packaging/linux/build.py')
 B = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(B)
-
 
 def ar_members(data):
     """The members of an ar archive: name and payload."""
@@ -165,6 +167,35 @@ class LinuxStaging(unittest.TestCase):
             name = B.build_rpm(payload, root, B.I['version'], 'x64')
             self.assertTrue(name.is_file())
             self.assertGreater(name.stat().st_size, 0)
+
+    def test_rpm_dependencies_are_rich_dependencies(self):
+        """Every alternative needs its parentheses.
+
+        RPM reads "gtk3 or libgtk-3-0" as three package names, so the
+        package would ask for a package called "or".
+        """
+        for requirement in B.RPM_REQUIRES:
+            if ' or ' in requirement:
+                self.assertTrue(requirement.startswith('(') and requirement.endswith(')'), requirement)
+
+    def test_rpm_does_not_own_the_shared_directories(self):
+        """The package must not claim a directory another package owns.
+
+        The base filesystem package owns /usr and /opt, and the icon theme
+        package owns the hicolor icon directories, so a package that owns
+        them cannot be installed next to them.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            payload, _ = self.stage(root)
+            owned = [name for name in RPM._files(payload) if name.startswith('%dir ')]
+            for name in owned:
+                path = name[len('%dir '):]
+                self.assertTrue(path.startswith('/opt/oink') or path.startswith('/usr/share/doc/oink'), path)
+            # The shared directories are present in the tree but stay unowned.
+            for shared in ('/usr', '/usr/bin', '/usr/share', '/usr/share/applications',
+                           '/usr/share/icons/hicolor/32x32/apps', '/opt'):
+                self.assertNotIn(f'%dir {shared}', owned, shared)
 
 
 class LinuxVersions(unittest.TestCase):

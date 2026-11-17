@@ -31,6 +31,17 @@ The Linux backends use X11: input capture and injection through XRecord and XTes
 
 System audio is not available on Linux yet: playing another device's audio on this device and sharing the microphone need a native audio backend, which Linux does not have yet. Everything else — keyboard, mouse, trackpad, clipboard, display layout and device discovery — works.
 
+On an immutable Fedora system, such as BazziteOS, Universal Blue or a Fedora
+Silverblue image, the root filesystem cannot be changed, so `dnf install` of a
+local `.rpm` fails. Layer the package instead and reboot into it:
+
+```
+sudo rpm-ostree install ./Oink-<version>-linux-<arch>.rpm
+```
+
+The package is unsigned, so a package manager that insists on a signature
+needs `--nosignature` (`rpm-ostree install --nosignature ...`).
+
 ### Sponsor
 
 If this project helps you, consider sponsoring some of my AI subscription costs. Those tokens help make Oink better.
