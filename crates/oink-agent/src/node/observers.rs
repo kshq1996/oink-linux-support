@@ -90,7 +90,7 @@ impl Node {
                     .native_services
                     .then(oink_audio::power::Monitor::new)
                     .and_then(Result::ok);
-                let mut mirror_hold = oink_input::power::Hold::default();
+                let mut mirror_hold = oink_input::power::hold();
                 let mut mirror_activity = None;
                 let mut mirror_error = None;
                 let mut previous_power = oink_audio::power::State::default();

@@ -8,6 +8,22 @@ mod platform;
 #[cfg(any(target_os = "macos", windows))]
 pub use platform::{Hold, observe};
 
+/// A fresh power holder for this platform.
+///
+/// macOS and Windows own native assertions and build a holder with fields;
+/// the other platforms have no assertion to hold. The constructor keeps the
+/// call sites free of platform details.
+pub fn hold() -> Hold {
+    #[cfg(any(target_os = "macos", windows))]
+    {
+        Hold::default()
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        Hold
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct State {
     pub display: bool,
