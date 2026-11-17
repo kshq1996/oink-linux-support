@@ -1,7 +1,8 @@
-Oink 0.3.6 improves automatic updates and fixes Oink becoming unresponsive on Windows after running in the background for a long time.
+Oink 0.3.6 is the first Linux release: Oink now runs on Linux desktops next to the existing Mac and Windows builds. It also improves automatic updates and fixes Oink becoming unresponsive on Windows after running in the background for a long time.
 
 ## New
 
+- Oink now runs on Linux, for both x64 and arm64, as a `.deb` package for Debian, Ubuntu and Linux Mint and an `.rpm` package for Fedora, openSUSE and RHEL. Keyboard, mouse, trackpad, clipboard, display layout and device discovery work on Linux; system audio and the cursor trail overlay do not yet.
 - Reworked automatic updates.
 - On Mac, verification after dragging in the installer is faster.
 - The pointer event rate limit offers more levels to choose from.
@@ -24,6 +25,8 @@ Oink 0.3.6 improves automatic updates and fixes Oink becoming unresponsive on Wi
 
 ## Downloads
 
+- **Linux (x64):** the `.deb` or `.rpm` file — a desktop session with X11, or a Wayland session through XWayland.
+- **Linux (arm64):** the `.deb` or `.rpm` file — a desktop session with X11, or a Wayland session through XWayland.
 - **Mac (Apple silicon):** the `.dmg` file — macOS 14.2 or later.
 - **Mac (Intel):** the `.dmg` file marked `x64` — macOS 14.2 or later.
 - **Windows:** the `.msi` file — x64, Windows 10 version 1809 (build 17763) or later, or Windows 11. Windows 10 versions before 22H2 are untested.

@@ -57,6 +57,7 @@ docker run --rm --platform "linux/$ARCH" \
     --env OINK_LINUX_SEQUENCE="$SEQUENCE" \
     --env OINK_REPORT_DSN \
     --env OINK_REPORT_REGION \
+    --env GITHUB_SHA \
     --env GIT_CONFIG_COUNT=1 \
     --env GIT_CONFIG_KEY_0=safe.directory \
     --env GIT_CONFIG_VALUE_0='*' \

@@ -119,3 +119,23 @@ jobs:
         run: |
           if ! cargo deny --version 2>/dev/null | grep -q '0.20.2$'; then cargo install cargo-deny --version 0.20.2 --locked; fi
           cargo deny check
+
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux builds and tests run inside the project image, so the runner
+          # and a developer exercise the same toolchain and system libraries.
+          - os: ubuntu-24.04
+            arch: amd64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Run the Linux suite in the project image
+        run: tools/linux/run-docker-tests.sh --arch ${{ matrix.arch }} --deny

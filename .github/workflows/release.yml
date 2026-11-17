@@ -6,6 +6,11 @@ on:
         description: Build sequence n of the packaged version (build = major*10^7 + minor*10^5 + patch*10^3 + n); higher than every in-house n of that version
         required: true
         type: string
+  # A push to the default branch publishes the version in the manifest. The
+  # guard job below skips the run when that version was already released, so
+  # only the first push after a version change builds and publishes anything.
+  push:
+    branches: [main]
 permissions:
   contents: read
 concurrency:
@@ -18,27 +23,48 @@ env:
   CMAKE_POLICY_VERSION_MINIMUM: '3.5'
   OINK_REPORT_REGION: eu
 jobs:
+  guard:
+    name: Decide whether this run publishes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.check.outputs.publish }}
+      platforms: ${{ steps.check.outputs.platforms }}
+      matrix: ${{ steps.check.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14.6'
+      - name: Check the release version
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OINK_RELEASE_PLATFORMS: ${{ vars.OINK_RELEASE_PLATFORMS }}
+        run: |
+          version="$(python3 -c "import json;print(json.load(open('packaging/identity.json'))['version'])")"
+          if [[ "${{ github.event_name }}" == "push" ]] && gh release view "v$version" >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Release v$version exists already; nothing to publish."
+            exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          # One list names the platforms this release publishes: the matrix
+          # builds them and the draft job requires exactly their records.
+          platforms="$(python3 build-support/release_platforms.py list)"
+          echo "platforms=$platforms" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(python3 build-support/release_platforms.py matrix)" >> "$GITHUB_OUTPUT"
   package:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'oinkvm/oink' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: guard
+    if: needs.guard.outputs.publish == 'true' && github.repository == 'kshq1996/oink-linux-support' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: macos-15
-            platform: macos
-            arch: arm64
-            target: aarch64-apple-darwin
-            jobs: '2'
-          - os: macos-15-intel
-            platform: macos
-            arch: x64
-            target: x86_64-apple-darwin
-            jobs: '2'
-          - os: windows-2022
-            platform: windows
-            target: x86_64-pc-windows-msvc
-            jobs: '4'
+      matrix: ${{ fromJson(needs.guard.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     environment: release
     permissions:
@@ -51,21 +77,25 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
+        if: runner.os != 'Linux'
         with:
           toolchain: '1.99.0'
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        if: runner.os != 'Linux'
         with:
           key: release-${{ matrix.target }}
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.14.6'
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        if: runner.os != 'Linux'
         with:
           node-version: '24.14.1'
           cache: npm
           cache-dependency-path: package-lock.json
       - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
+        if: runner.os != 'Linux'
         with:
           path: |
             ~/.cargo/bin/cargo-about*
@@ -75,7 +105,7 @@ jobs:
         id: inputs
         shell: bash
         env:
-          SEQUENCE: ${{ inputs.sequence }}
+          SEQUENCE: ${{ inputs.sequence || '1' }}
           OINK_REPORT_DSN: ${{ secrets.OINK_REPORT_DSN }}
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
           SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -96,6 +126,7 @@ jobs:
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
       - name: Pin build tools
+        if: runner.os != 'Linux'
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == macOS ]]; then test "$(uname -m)" = "${{ matrix.target == 'aarch64-apple-darwin' && 'arm64' || 'x86_64' }}"; fi
@@ -121,11 +152,12 @@ jobs:
           echo 'block return out quick proto udp from any to any port 443' | sudo pfctl -f -
           sudo pfctl -E
       - name: Build and audit production packages
+        if: runner.os != 'Linux'
         shell: bash
         env:
           OINK_REPORT_DSN: ${{ secrets.OINK_REPORT_DSN }}
           MACOS_SIGNING_FINGERPRINT: ${{ vars.MACOS_SIGNING_FINGERPRINT }}
-          SEQUENCE: ${{ inputs.sequence }}
+          SEQUENCE: ${{ inputs.sequence || '1' }}
           PLATFORM: ${{ matrix.platform }}
         run: |
           args=()
@@ -135,7 +167,16 @@ jobs:
           python build-support/package.py --public-version --platform "$PLATFORM" --sequence "$SEQUENCE" --output-root "$RUNNER_TEMP/packages" --tool-cache "$RUNNER_TEMP/package-tools" "${args[@]}"
           python build-support/check-report-configuration.py --packages "$RUNNER_TEMP/packages" --platform "$PLATFORM"
           python build-support/public_release.py stage --packages "$RUNNER_TEMP/packages" --platform "$PLATFORM" --sequence "$SEQUENCE" --output "$RUNNER_TEMP/distribution"
+      - name: Build and audit the Linux packages
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          OINK_REPORT_DSN: ${{ secrets.OINK_REPORT_DSN }}
+          SEQUENCE: ${{ inputs.sequence || '1' }}
+          OINK_LINUX_ARCH: ${{ matrix.arch == 'arm64' && 'arm64' || 'amd64' }}
+        run: tools/linux/release-package.sh --arch "$OINK_LINUX_ARCH" --output-root "$RUNNER_TEMP"
       - name: Upload native debug files to the existing EU project
+        if: runner.os != 'Linux'
         shell: bash
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -148,7 +189,7 @@ jobs:
         if: runner.os == 'Windows' && steps.inputs.outputs.sign_windows == 'true'
         id: unsigned
         with:
-          name: windows-signing-input-${{ inputs.sequence }}
+          name: windows-signing-input-${{ inputs.sequence || '1' }}
           path: ${{ runner.temp }}/distribution/*
           if-no-files-found: error
       - name: Sign Windows MSI when configured
@@ -171,19 +212,20 @@ jobs:
           Copy-Item "$env:RUNNER_TEMP/signed/*.msi" "$env:RUNNER_TEMP/distribution/" -Force
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: package-${{ matrix.platform }}-${{ matrix.target }}-${{ inputs.sequence }}
+          name: package-${{ matrix.platform }}-${{ matrix.target }}-${{ inputs.sequence || '1' }}
           path: ${{ runner.temp }}/distribution/*
           if-no-files-found: error
       - name: Preserve symbols separately (never release assets)
+        if: runner.os != 'Linux'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: symbols-${{ matrix.platform }}-${{ matrix.target }}-${{ inputs.sequence }}
+          name: symbols-${{ matrix.platform }}-${{ matrix.target }}-${{ inputs.sequence || '1' }}
           path: ${{ runner.temp }}/packages/**/symbols.noindex/**
           include-hidden-files: true
           if-no-files-found: error
   draft:
-    needs: package
-    if: github.event_name == 'workflow_dispatch'
+    needs: [guard, package]
+    if: needs.guard.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -197,12 +239,18 @@ jobs:
           python-version: '3.14.6'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: package-*-${{ inputs.sequence }}
+          pattern: package-*-${{ inputs.sequence || '1' }}
           path: ${{ runner.temp }}/downloaded
       - name: Assemble matching final assets and create draft
         env:
-          SEQUENCE: ${{ inputs.sequence }}
+          SEQUENCE: ${{ inputs.sequence || '1' }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          python build-support/public_release.py assemble --downloads "$RUNNER_TEMP/downloaded" --output "$RUNNER_TEMP/release" --sequence "$SEQUENCE"
+          python build-support/public_release.py assemble --downloads "$RUNNER_TEMP/downloaded" --output "$RUNNER_TEMP/release" --sequence "$SEQUENCE" --platforms "${{ needs.guard.outputs.platforms }}"
           python build-support/public_release.py publish --output "$RUNNER_TEMP/release" --notes .github/release-notes.txt
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(python3 -c "import json;print(json.load(open('packaging/identity.json'))['version'])")"
+          gh release edit "$tag" --draft=false --latest
