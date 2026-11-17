@@ -61,5 +61,3 @@ No. Oink is free software released under GPL-3.0-only with additional terms, so 
 ## License
 
 This project is licensed under [GPL-3.0-only](LICENSE) with [additional terms](LICENSE-ADDITIONAL-TERMS.md).
-
-<!-- Linux trigger check -->
