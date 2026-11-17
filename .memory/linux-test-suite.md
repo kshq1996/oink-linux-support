@@ -23,6 +23,11 @@ The Linux test suite of this fork (2026-11-17):
   `OINK_LINUX_ARCH=arm64 tools/linux/run-docker-tests.sh --arch arm64`.
 - The CI runs the same script on `ubuntu-24.04` (amd64) and
   `ubuntu-24.04-arm` (arm64); both are native.
+- **A hung OrbStack daemon is fixed by restarting the app.** When `docker info` hangs and
+  `~/.orbstack/run/docker.sock` is a zero-byte file, the virtual machine is not serving the engine:
+  quit OrbStack (`osascript -e 'quit app "OrbStack"'`) and start it again (`open -a OrbStack`). The
+  engine answers after about twenty seconds, and the named volumes (cargo registry, target
+  directory) survive the restart.
 
 **Why:** the emulated failures look like port defects and cost a full debug
 cycle before the emulation was identified as the cause.
