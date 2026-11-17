@@ -61,7 +61,7 @@ def desktop_entry():
                       'Exec=oink',
                       'Icon=oink',
                       'Terminal=false',
-                      'Categories=Utility;Network;',
+                      'Categories=Utility;RemoteAccess;',
                       'StartupNotify=true',
                       'StartupWMClass=com.hachiwii.oink',
                       'X-GNOME-UsesNotifications=true',

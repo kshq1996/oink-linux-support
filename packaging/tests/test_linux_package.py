@@ -141,6 +141,18 @@ class LinuxStaging(unittest.TestCase):
             self.assertTrue(link.issym())
             self.assertEqual(link.linkname, f'/{B.INSTALL_DIRECTORY}/{B.I["binaries"]["ui"]}')
 
+    def test_the_desktop_entry_declares_one_main_category(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            payload, _ = self.stage(root)
+            entry = (payload / B.APPLICATIONS_DIRECTORY / 'com.hachiwii.oink.desktop').read_text()
+            self.assertIn('Exec=oink', entry)
+            categories = next(line for line in entry.splitlines() if line.startswith('Categories='))
+            main = {'AudioVideo', 'Audio', 'Video', 'Development', 'Education', 'Game', 'Graphics',
+                    'Network', 'Office', 'Science', 'Settings', 'System', 'Utility'}
+            values = [value for value in categories.split('=', 1)[1].split(';') if value]
+            self.assertEqual(len([value for value in values if value in main]), 1)
+
     def test_rpm_package_is_built_from_the_same_tree(self):
         if shutil.which('rpmbuild') is None:
             self.skipTest('rpmbuild is not installed')
