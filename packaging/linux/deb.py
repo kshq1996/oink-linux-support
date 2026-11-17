@@ -8,7 +8,7 @@ an explicit mode, owner and timestamp instead of whatever the build host used.
 import gzip
 import io
 import tarfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 CONTROL = 'control'
 MD5SUMS = 'md5sums'
@@ -41,13 +41,26 @@ def _tar_bytes(entries):
     return gzip.compress(raw.getvalue(), compresslevel=9, mtime=0)
 
 
+def link_target(path):
+    """The target of a staged symlink, as the package records it.
+
+    The package is a Linux filesystem tree, so the target is a POSIX path even
+    when the tree was staged on a host with other path separators.
+    """
+    target = path.readlink()
+    parts = target.parts
+    if parts and parts[0] == target.anchor:
+        parts = parts[1:]
+    return ('/' if target.root else '') + PurePosixPath(*parts).as_posix()
+
+
 def _tree_entries(root):
     """The staged tree as tar members, directories first and paths relative."""
     entries = []
     for path in sorted(root.rglob('*')):
         name = './' + path.relative_to(root).as_posix()
         if path.is_symlink():
-            entries.append((name, 0o120777, tarfile.SYMTYPE, str(path.readlink()).encode()))
+            entries.append((name, 0o120777, tarfile.SYMTYPE, link_target(path).encode()))
         elif path.is_dir():
             entries.append((name + '/', 0o755, tarfile.DIRTYPE, b''))
         else:

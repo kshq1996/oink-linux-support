@@ -15,7 +15,7 @@ import hashlib
 import json
 import shutil
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from deb import build as build_deb_package
@@ -29,12 +29,20 @@ from provenance import digest
 from report_manifest import write_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
-# The UI resolves the backend as a sibling of its own executable.
-INSTALL_DIRECTORY = Path('opt/oink')
-DOC_DIRECTORY = Path('usr/share/doc/oink')
-APPLICATIONS_DIRECTORY = Path('usr/share/applications')
-BIN_DIRECTORY = Path('usr/bin')
-ICONS_DIRECTORY = Path('usr/share/icons/hicolor')
+# The installed tree is a Linux filesystem tree: its paths are POSIX, whatever
+# host stages it. The host paths are derived from them explicitly.
+INSTALL_DIRECTORY = PurePosixPath('opt/oink')
+DOC_DIRECTORY = PurePosixPath('usr/share/doc/oink')
+APPLICATIONS_DIRECTORY = PurePosixPath('usr/share/applications')
+BIN_DIRECTORY = PurePosixPath('usr/bin')
+ICONS_DIRECTORY = PurePosixPath('usr/share/icons/hicolor')
+
+
+def host_path(root, relative):
+    """The host path of a package-relative POSIX path."""
+    return root.joinpath(*relative.parts)
+
+
 # The dependency names differ between the two distribution families, and the
 # RPM names differ between Fedora/RHEL and openSUSE as well.
 DEBIAN_DEPENDS = ('libc6, libgtk-3-0, libwebkit2gtk-4.1-0, libayatana-appindicator3-1, '
@@ -70,7 +78,7 @@ def desktop_entry():
 
 def stage(root, binaries, notes_file, record):
     """Lay out the installed tree the two packages share."""
-    directory = root / INSTALL_DIRECTORY
+    directory = host_path(root, INSTALL_DIRECTORY)
     directory.mkdir(parents=True)
     for role in ('ui', 'agent', 'backend'):
         name = I['binaries'][role]
@@ -84,17 +92,17 @@ def stage(root, binaries, notes_file, record):
     # A symbolic link keeps the installation directory the only copy.
     for role in ('ui', 'agent'):
         name = I['binaries'][role]
-        link = root / BIN_DIRECTORY / name
+        link = host_path(root, BIN_DIRECTORY) / name
         link.parent.mkdir(parents=True, exist_ok=True)
-        link.symlink_to(Path('/') / INSTALL_DIRECTORY / name)
+        link.symlink_to(f'/{INSTALL_DIRECTORY.as_posix()}/{name}')
     for size, icon in (('32x32', '32x32.png'), ('128x128', '128x128.png'), ('256x256', '128x128@2x.png')):
-        target = root / ICONS_DIRECTORY / size / 'apps'
+        target = host_path(root, ICONS_DIRECTORY) / size / 'apps'
         target.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / 'apps/oink/src-tauri/icons' / icon, target / 'oink.png')
-    applications = root / APPLICATIONS_DIRECTORY
+    applications = host_path(root, APPLICATIONS_DIRECTORY)
     applications.mkdir(parents=True, exist_ok=True)
     (applications / 'com.hachiwii.oink.desktop').write_text(desktop_entry(), encoding='utf-8')
-    documentation = root / DOC_DIRECTORY
+    documentation = host_path(root, DOC_DIRECTORY)
     documentation.mkdir(parents=True, exist_ok=True)
     copy_notices(documentation)
     if notes_file:

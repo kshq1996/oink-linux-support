@@ -66,7 +66,7 @@ pub(super) fn open(node: &Node, path: &str) -> ApiResult<UpdateStatus> {
         staged.package.validate(
             &state.status.version,
             state.status.current_build,
-            if cfg!(target_arch = "x86") { "x64" } else { "arm64" },
+            if cfg!(target_arch = "x86_64") { "x64" } else { "arm64" },
         )?;
         state.status.candidate = Some(staged.package.candidate());
         state.local = Some(staged);

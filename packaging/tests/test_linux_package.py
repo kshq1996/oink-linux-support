@@ -13,6 +13,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'packaging/linux'), str(ROOT / 'build-support')]
+DEB_SPEC = importlib.util.spec_from_file_location('linux_deb', ROOT / 'packaging/linux/deb.py')
+DEB = importlib.util.module_from_spec(DEB_SPEC)
+DEB_SPEC.loader.exec_module(DEB)
 SPEC = importlib.util.spec_from_file_location('linux_build', ROOT / 'packaging/linux/build.py')
 B = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(B)
@@ -90,17 +93,17 @@ class LinuxStaging(unittest.TestCase):
             payload, record = self.stage(root)
             for role in ('ui', 'agent', 'backend'):
                 name = B.I['binaries'][role]
-                self.assertTrue((payload / B.INSTALL_DIRECTORY / name).is_file(), name)
+                self.assertTrue((B.host_path(payload, B.INSTALL_DIRECTORY) / name).is_file(), name)
             # The desktop entry and the PATH entries reach the same binaries.
-            entry = payload / B.APPLICATIONS_DIRECTORY / 'com.hachiwii.oink.desktop'
+            entry = B.host_path(payload, B.APPLICATIONS_DIRECTORY) / 'com.hachiwii.oink.desktop'
             self.assertIn('Exec=oink', entry.read_text())
             for role in ('ui', 'agent'):
                 name = B.I['binaries'][role]
-                link = payload / B.BIN_DIRECTORY / name
+                link = B.host_path(payload, B.BIN_DIRECTORY) / name
                 self.assertTrue(link.is_symlink(), name)
-                self.assertEqual(str(link.readlink()), f'/{B.INSTALL_DIRECTORY}/{name}')
-            self.assertTrue((payload / B.DOC_DIRECTORY / 'LICENSE').is_file())
-            self.assertTrue((payload / B.INSTALL_DIRECTORY / 'report-manifest.json').is_file())
+                self.assertEqual(DEB.link_target(link), f'/{B.INSTALL_DIRECTORY}/{name}')
+            self.assertTrue((B.host_path(payload, B.DOC_DIRECTORY) / 'LICENSE').is_file())
+            self.assertTrue((B.host_path(payload, B.INSTALL_DIRECTORY) / 'report-manifest.json').is_file())
             self.assertIn('report_manifest', record)
 
     def test_debian_package_carries_the_control_file_and_the_tree(self):
@@ -145,7 +148,7 @@ class LinuxStaging(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             payload, _ = self.stage(root)
-            entry = (payload / B.APPLICATIONS_DIRECTORY / 'com.hachiwii.oink.desktop').read_text()
+            entry = (B.host_path(payload, B.APPLICATIONS_DIRECTORY) / 'com.hachiwii.oink.desktop').read_text()
             self.assertIn('Exec=oink', entry)
             categories = next(line for line in entry.splitlines() if line.startswith('Categories='))
             main = {'AudioVideo', 'Audio', 'Video', 'Development', 'Education', 'Game', 'Graphics',
