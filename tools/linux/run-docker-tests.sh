@@ -12,7 +12,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE_PREFIX="${OINK_LINUX_IMAGE_PREFIX:-oink-linux-build:0.3.6}"
+# shellcheck source=tools/linux/image.sh
+source "$ROOT/tools/linux/image.sh"
 CARGO_VOLUME_PREFIX="${OINK_LINUX_CARGO_VOLUME_PREFIX:-oink-linux-cargo}"
 TARGET_VOLUME_PREFIX="${OINK_LINUX_TARGET_VOLUME_PREFIX:-oink-linux-target}"
 

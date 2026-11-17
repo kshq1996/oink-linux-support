@@ -10,8 +10,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=tools/linux/image.sh
+source "$ROOT/tools/linux/image.sh"
 ARCH="${OINK_LINUX_ARCH:-amd64}"
-IMAGE="${OINK_LINUX_IMAGE_PREFIX:-oink-linux-build:0.3.6}-$ARCH"
+IMAGE="$IMAGE_PREFIX-$ARCH"
 
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
     docker buildx build --platform "linux/$ARCH" \

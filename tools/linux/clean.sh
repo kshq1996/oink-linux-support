@@ -11,7 +11,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE_PREFIX="${OINK_LINUX_IMAGE_PREFIX:-oink-linux-build:0.3.6}"
+# shellcheck source=tools/linux/image.sh
+source "$ROOT/tools/linux/image.sh"
 CARGO_VOLUME_PREFIX="${OINK_LINUX_CARGO_VOLUME_PREFIX:-oink-linux-cargo}"
 TARGET_VOLUME_PREFIX="${OINK_LINUX_TARGET_VOLUME_PREFIX:-oink-linux-target}"
 
@@ -24,9 +25,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-for arch in amd64 arm64; do
-    docker image rm "$IMAGE_PREFIX-$arch" >/dev/null 2>&1 || true
-done
+# Every version of the toolchain image goes, not only the current one.
+while read -r image; do
+    docker image rm "$image" >/dev/null 2>&1 || true
+done < <(docker image ls --format '{{.Repository}}:{{.Tag}}' | grep "^${IMAGE_REPOSITORY}:" || true)
 
 if [[ "$ALL" == "1" ]]; then
     for arch in amd64 arm64; do
@@ -40,7 +42,7 @@ if [[ "$ALL" == "1" ]]; then
 fi
 
 # Containers only survive a killed run; a finished run removes itself.
-docker ps -a --filter "ancestor=$IMAGE_PREFIX-amd64" --filter "ancestor=$IMAGE_PREFIX-arm64" \
+docker ps -a --filter "ancestor=$IMAGE_REPOSITORY" \
     --format '{{.ID}}' | while read -r id; do
     docker rm --force "$id" >/dev/null 2>&1 || true
 done
