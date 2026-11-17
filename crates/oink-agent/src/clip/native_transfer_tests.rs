@@ -65,22 +65,14 @@ async fn scenario() {
             clip: id,
             generation: id.seq,
         },
-        platform: if cfg!(target_os = "macos") {
-            ClipPlatform::Mac
-        } else {
-            ClipPlatform::Windows
-        },
+        platform: ClipPlatform::local(),
         items: vec![ContentItem {
             virtual_files: false,
             id: ItemId(1),
             file: None,
             representations: vec![Representation {
                 id: RepresentationId(1),
-                format: if cfg!(target_os = "macos") {
-                    NativeFormat::Mac("example.test.raw".into())
-                } else {
-                    NativeFormat::WindowsRegistered("Oink Test Raw".into())
-                },
+                format: NativeFormat::local("example.test.raw"),
                 medium: Medium::Bytes,
                 aspect: 1,
                 index: -1,

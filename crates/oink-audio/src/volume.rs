@@ -272,6 +272,29 @@ fn state(version: ExitVolumeVersion, reading: Result<Reading, Fault>) -> Result<
     ExitVolumeState::from_raw(raw).map_err(|_| ControlFailure::InvalidValue)
 }
 
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(windows)]
+mod windows;
+/// Opens the exact selected output. No fallback to another/default device.
+pub fn open(output: &str, wake: std::sync::Arc<dyn Fn() + Send + Sync>) -> Result<Box<dyn Endpoint>, Fault> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::open(output, wake)
+    }
+    #[cfg(windows)]
+    {
+        windows::open(output, wake)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = (output, wake);
+        Err(Fault {
+            status: ExitVolumeStatus::Unsupported,
+            native_code: None,
+        })
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -639,29 +662,5 @@ mod tests {
         );
         // The volume owner deliberately has no sharing-pause flag: control of a
         // live output remains legal while input/media participation is paused.
-    }
-}
-
-#[cfg(target_os = "macos")]
-mod macos;
-#[cfg(windows)]
-mod windows;
-/// Opens the exact selected output. No fallback to another/default device.
-pub fn open(output: &str, wake: std::sync::Arc<dyn Fn() + Send + Sync>) -> Result<Box<dyn Endpoint>, Fault> {
-    #[cfg(target_os = "macos")]
-    {
-        macos::open(output, wake)
-    }
-    #[cfg(windows)]
-    {
-        windows::open(output, wake)
-    }
-    #[cfg(not(any(target_os = "macos", windows)))]
-    {
-        let _ = (output, wake);
-        Err(Fault {
-            status: ExitVolumeStatus::Unsupported,
-            native_code: None,
-        })
     }
 }

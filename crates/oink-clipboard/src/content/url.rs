@@ -189,7 +189,8 @@ pub(crate) fn names(item: &ContentItem, target: ClipPlatform) -> Vec<String> {
     let mut names = match target {
         ClipPlatform::Mac => vec!["public.url"],
         ClipPlatform::Windows => vec!["UniformResourceLocatorW", "UniformResourceLocator"],
-        ClipPlatform::Unknown => return Vec::new(),
+        // Linux publishes a received link as text; it has no URL target.
+        ClipPlatform::Linux | ClipPlatform::Unknown => return Vec::new(),
     };
     if has_title {
         names.push(if target == ClipPlatform::Mac {

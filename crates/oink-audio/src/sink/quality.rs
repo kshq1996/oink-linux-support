@@ -1,4 +1,7 @@
 //! Output provenance, not packet deadlines. No sample storage, locks or allocation.
+//! The native playback backends exist on macOS and Windows only, so the
+//! machinery they drive is unused in a Linux build.
+#![cfg_attr(target_os = "linux", allow(dead_code))]
 use super::{DropoutBucket, DropoutCounters};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]

@@ -324,7 +324,14 @@ fn normalized_name(value: &str) -> String {
             value.into()
         }
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        // The same canonical form as Foundation's precomposed mapping and
+        // Windows' NormalizationC: a received name is one composed string.
+        use unicode_normalization::UnicodeNormalization;
+        value.nfc().collect()
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         value.into()
     }

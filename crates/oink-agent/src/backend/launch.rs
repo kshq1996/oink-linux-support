@@ -22,6 +22,45 @@ pub fn start_backend_tracked(data_dir: &Path) -> std::io::Result<oink_winsvc::ba
     oink_winsvc::backend::start_tracked(data_dir)
 }
 
+/// The backend executable that ships next to the UI in the Linux package.
+#[cfg(target_os = "linux")]
+pub const BACKEND_EXECUTABLE: &str = "oink-backend";
+
+/// A backend process this launcher started, so the caller can watch it.
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+pub struct StartedProcess {
+    child: Child,
+}
+
+#[cfg(target_os = "linux")]
+impl StartedProcess {
+    /// The process id of the started backend.
+    pub fn id(&self) -> u32 {
+        self.child.id()
+    }
+
+    /// The exit code once the backend ended; `None` while it still runs.
+    pub fn exit_code(&mut self) -> std::io::Result<Option<i32>> {
+        Ok(self.child.try_wait()?.and_then(|status| status.code()))
+    }
+}
+
+/// Starts the backend that ships next to this executable.
+///
+/// The Linux package keeps the UI, the CLI and the backend in one directory, so
+/// the backend is a sibling of the running UI rather than a system service.
+#[cfg(target_os = "linux")]
+pub fn start_backend_tracked(_data_dir: &Path) -> std::io::Result<StartedProcess> {
+    let executable = std::env::current_exe()?;
+    let directory = executable
+        .parent()
+        .ok_or_else(|| std::io::Error::other("backend directory unavailable"))?;
+    let mut command = Command::new(directory.join(BACKEND_EXECUTABLE));
+    let child = spawn_detached(&mut command)?;
+    Ok(StartedProcess { child })
+}
+
 pub const TIED_TO_JOB: &str = "backend lifetime tied to the launching job";
 
 /// Query the current process, rather than trusting an inherited environment marker.

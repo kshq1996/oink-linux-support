@@ -1,4 +1,6 @@
 //! Read-only button provenance. This never releases, injects, filters or repairs input.
+// Only the macOS and Windows backends report button transitions so far.
+#![cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
 use oink_foundation::input::MouseButton;
 use serde::{Deserialize, Serialize};
 
@@ -66,6 +68,8 @@ pub fn enabled() -> bool {
 }
 
 pub fn system_state(button: MouseButton) -> SystemState {
+    // macOS / Windows 会往里填本机状态；其它平台没有可填的字段。
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(unused_mut))]
     let mut state = SystemState {
         sampled_at_us: crate::native_lifecycle::timestamp(),
         ..Default::default()

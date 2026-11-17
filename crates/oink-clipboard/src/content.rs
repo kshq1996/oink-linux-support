@@ -586,6 +586,7 @@ pub fn decode_standard(representation: &Representation, bytes: &[u8]) -> io::Res
             let (platform, name) = match &representation.format {
                 NativeFormat::Mac(name) => (oink_foundation::clipboard::ClipPlatform::Mac, name),
                 NativeFormat::WindowsRegistered(name) => (oink_foundation::clipboard::ClipPlatform::Windows, name),
+                NativeFormat::Linux(name) => (oink_foundation::clipboard::ClipPlatform::Linux, name),
                 _ => return Err(unavailable(Unavailable::Unsupported)),
             };
             if !crate::formats::is_marker(platform, name) {

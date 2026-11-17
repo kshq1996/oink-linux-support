@@ -141,7 +141,7 @@ export function AboutWindow({ platform, open, front, version, build, stage, onFr
     return <div className="win about" data-platform={platform} data-active={front ? '' : undefined} data-front="" role="dialog" aria-label={tr('关于 Oink')} style={{ left: 0, top: 0, width: '100%', height: '100%' }} onPointerDownCapture={onFront} onKeyDown={e => { if (e.key === 'Escape')
         onClose(); }}>
     <div className="win__titlebar about__bar" data-tauri-drag-region>
-      <span hidden={inTauri && platform === 'win'} style={inTauri && platform === 'mac' ? {visibility:'hidden',pointerEvents:'none'} : undefined}>{close}</span>
+      <span hidden={inTauri && platform !== 'mac'} style={inTauri && platform === 'mac' ? {visibility:'hidden',pointerEvents:'none'} : undefined}>{close}</span>
       {page === 'licenses' && <span className="about__crumb"><Button variant="ghost" size="sm" iconOnly aria-label={tr('返回')} onClick={() => { termsGeneration.current++; if (selected)
         setSelected(null);
     else

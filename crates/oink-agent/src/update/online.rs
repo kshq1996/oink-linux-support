@@ -341,6 +341,8 @@ fn automatic(node: &Node) {
     node.emit(ApiEvent::UpdateStatusChanged(status));
     run_check(node, generation, Check::Automatic);
 }
+// The signed catalog is the macOS release feed; only macOS checks it.
+#[cfg(target_os = "macos")]
 pub(super) fn spawn_check(node: &Node, generation: u64, check: Check) {
     let node = node.clone();
     std::thread::spawn(move || run_check(&node, generation, check));

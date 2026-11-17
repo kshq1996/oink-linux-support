@@ -17,6 +17,7 @@ impl Appearance {
     }
 }
 
+#[cfg(any(target_os = "macos", windows, test))]
 #[derive(Clone, Copy)]
 pub(crate) enum Artwork {
     #[cfg(any(target_os = "macos", test))]
@@ -25,6 +26,7 @@ pub(crate) enum Artwork {
     Windows,
 }
 
+#[cfg(any(target_os = "macos", windows, test))]
 pub(crate) fn render(artwork: Artwork, appearance: Appearance, size: u32) -> Result<tiny_skia::Pixmap, String> {
     let source = match artwork {
         #[cfg(any(target_os = "macos", test))]
@@ -47,7 +49,7 @@ pub(crate) fn render(artwork: Artwork, appearance: Appearance, size: u32) -> Res
     render_svg(&svg, size)
 }
 
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "linux", test))]
 pub(crate) fn render_tray(
     look: oink_agent::tray::TrayLook,
     appearance: Appearance,

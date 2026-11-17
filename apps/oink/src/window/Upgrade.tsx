@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Button, Checkbox, Dialog, Icon, Tooltip, toast } from 'oink-ui';
 import type { DialogProps } from 'oink-ui';
 import { usePackageDrag, usePackageDropReceiver } from './PackageDrop';
+import { platformOf } from './DesktopWindow';
 import { ProgressFill } from './ProgressFill';
 export { localPackagePath } from './PackageDrop';
 import { api, shell } from '../api/client';
@@ -108,7 +109,7 @@ export function UpgradeDialog({container}:{container:HTMLElement|null}) {
   // The user started a check from this dialog; its outcome is shown here even when nothing is found.
   const [rechecked,setRechecked]=useState(false);
   const dragging=usePackageDrag();
-  usePackageDropReceiver(boot?.platform==='windows'?'win':'mac',path=>{
+  usePackageDropReceiver(platformOf(boot?.platform),path=>{
     setLocalFile(true);setRestoredFailure(false);openUpdateDialog();
     void command({type:'open_local',path});
   });

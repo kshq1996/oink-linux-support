@@ -2,7 +2,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=OINK_RELEASE_VERSION");
     println!("cargo:rerun-if-env-changed=OINK_RELEASE_BUILD");
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if target_os != "macos" && target_os != "windows" {
+    if target_os != "macos" && target_os != "windows" && target_os != "linux" {
         return;
     }
     #[cfg(any(target_os = "macos", windows))]
@@ -42,4 +42,9 @@ fn main() {
     } else {
         tauri_build::build();
     }
+
+    // Linux has no bundle resources to compile; the context is generated for
+    // the same reason as on macOS: the packaged frontend and the window icon.
+    #[cfg(target_os = "linux")]
+    tauri_build::build();
 }

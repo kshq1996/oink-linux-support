@@ -9,18 +9,27 @@
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md) | [한국어](README.ko.md)
 
-Oink 是 Oink Is Not only a KVM 的缩写，是一款在多台 Windows 和 Mac 设备间建立对等共享网络的现代软件。同时使用任何设备的键盘、鼠标、触摸板操控任意邻近设备，保持统一、原生的操作手感；将多台设备的音频通过连接至一台设备的扬声器或耳机播放；支持剪贴板共享和跨设备拖拽；支持局域网设备自动发现；默认加密传输。
+Oink 是 Oink Is Not only a KVM 的缩写，是一款在多台 Windows、Mac 和 Linux 设备间建立对等共享网络的现代软件。同时使用任何设备的键盘、鼠标、触摸板操控任意邻近设备，保持统一、原生的操作手感；将多台设备的音频通过连接至一台设备的扬声器或耳机播放；支持剪贴板共享和跨设备拖拽；支持局域网设备自动发现；默认加密传输。
 
 ## 安装
 
-从 [GitHub Releases](https://github.com/oinkvm/oink/releases) 下载安装包和对应的源码。
+从 [GitHub Releases](https://github.com/kshq1996/oink-linux-support/releases) 下载安装包和对应的源码。
 
 支持的操作系统和版本：
 
 - **Mac**：Apple 芯片（arm64），macOS 14.2 及以上；Intel（x64），macOS 14.2 及以上（未经测试）
 - **Windows**：x64，Windows 10 1809（build 17763）及以上，或 Windows 11。22H2 之前的 Windows 10 版本未经测试。Windows 10 LTSC（如 LTSC 2019 / LTSC 2021）不自带 WebView2 Runtime，请先安装 Microsoft Edge WebView2 Runtime（Evergreen）：https://developer.microsoft.com/microsoft-edge/webview2/
+- **Linux**：x64 与 arm64，需要带 X11（或 XWayland）的桌面会话。Debian、Ubuntu、Linux Mint 安装 `.deb` 包；Fedora、openSUSE、RHEL 安装 `.rpm` 包。
 
 如果 SmartScreen 提示“Windows 已保护你的电脑”，仅在出现相应选项时点击 **更多信息 → 仍要运行**。UAC 可能显示发布者未知。
+
+### Linux
+
+Linux 安装包包含三个程序：托盘应用 `oink`、命令行工具 `oink-agent` 和后台进程 `oink-backend`。安装包声明了运行时依赖（WebKitGTK 4.1、GTK 3、libayatana-appindicator3），发行版的包管理器会补齐缺失的部分。
+
+Linux 后端使用 X11：输入采集与注入通过 XRecord 和 XTest，剪贴板通过 X11 选择协议，显示器布局通过 XRandR。Wayland 会话通过 XWayland 工作。macOS 和 Windows 上的光标拖尾覆盖层在 Linux 上不可用。
+
+系统音频在 Linux 上暂不可用：把其他设备的音频播放到本机、共享麦克风都需要原生音频后端，Linux 尚无该后端。其余功能——键盘、鼠标、触控板、剪贴板、显示器布局与设备发现——均可正常使用。
 
 ### 赞助
 

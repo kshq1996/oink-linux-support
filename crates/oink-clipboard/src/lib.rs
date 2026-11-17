@@ -5,7 +5,9 @@
 
 // The AppKit harness compiles this crate with cfg(test) without libtest, whose
 // #[test] bodies are omitted. Their fixture helpers are consequently unused.
-#![cfg_attr(test, allow(dead_code, unused_imports))]
+// Linux 会话还没有接入 macOS/Windows 的那部分内容管线（原生文件发布、拖放来源追踪等）。
+// 这些模块在 Linux 上保留但不使用，不应因为平台差异产生告警；Linux 后端自己不允许被掩盖。
+#![cfg_attr(any(test, target_os = "linux"), allow(dead_code, unused_imports))]
 
 #[cfg(test)]
 fn main() {
@@ -123,6 +125,8 @@ pub mod formats;
 mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::file_provider;
+#[cfg(target_os = "linux")]
+mod linux;
 pub mod store;
 pub mod sync;
 #[cfg(any(windows, target_os = "macos", test))]
@@ -362,6 +366,8 @@ pub fn platform_backend() -> Result<Box<dyn ClipboardBackend>, ClipboardError> {
     return macos::backend();
     #[cfg(windows)]
     return windows::backend();
+    #[cfg(target_os = "linux")]
+    return linux::backend();
     #[allow(unreachable_code)]
     Err(ClipboardError::Unsupported)
 }

@@ -19,8 +19,8 @@ beforeEach(()=>{
   mocks.call.mockResolvedValue(mocks.state.localPreferences);
 });
 afterEach(cleanup);
-it.each(['macos','windows'])('persists a separate custom map through preset changes and a fresh webview on %s',async platform=>{
-  const mac=platform==='macos',target=mac?'windows':'macos';
+it.each(['macos','windows','linux'])('persists a separate custom map through preset changes and a fresh webview on %s',async platform=>{
+  const mac=platform==='macos',source=platform==='macos'?'mac':platform==='windows'?'win':'linux',target=mac?'windows':'macos';
   const keyboard:InputTransform['windows']['keyboard']={preset:'custom',table:[{from:0x700e0,to:0},{from:0x700e1,to:0x700e3},{from:0x700e2,to:0x700e0},{from:0x700e3,to:0x700e6},...(mac?[{from:0xff0003,to:0}]:[])],caps_tap_hold:{tap:0,hold:0}};
   let stored:InputTransform={macos:{reverse_wheel:false,keyboard:{preset:'none',table:[]}},windows:{reverse_wheel:false,keyboard:{preset:'none',table:[]}},overrides:[],[target]:{reverse_wheel:false,keyboard}};
   mocks.state={...mocks.state,boot:{platform},overview:{this_device:{id:'self'}}};
@@ -28,10 +28,10 @@ it.each(['macos','windows'])('persists a separate custom map through preset chan
   mocks.transform.mockImplementation(async(_device,value)=>{stored=JSON.parse(JSON.stringify(value));});
   const mounted=renderHook(usePreferences);
   await waitFor(()=>expect(mounted.result.current.canEdit('keymap')).toBe(true));
-  const custom=structuredClone(mounted.result.current.prefs.keyCustom[mac?'mac':'win']);
+  const custom=structuredClone(mounted.result.current.prefs.keyCustom[source]);
   for(const preset of ['mac','win'] as const){
     await act(async()=>mounted.result.current.set('keyPreset',preset));
-    expect(mounted.result.current.prefs.keyCustom[mac?'mac':'win']).toEqual(custom);
+    expect(mounted.result.current.prefs.keyCustom[source]).toEqual(custom);
     expect(mounted.result.current.prefs.capsSplit).toBe(true);
     expect(mounted.result.current.prefs.allowFnMapping).toBe(mac);
   }
@@ -39,8 +39,8 @@ it.each(['macos','windows'])('persists a separate custom map through preset chan
   localStorage.clear();
   const reloaded=renderHook(usePreferences);
   await waitFor(()=>expect(reloaded.result.current.prefs.keyPreset).toBe('win'));
-  expect(reloaded.result.current.prefs.keyCustom[mac?'mac':'win']).toEqual(custom);
-  expect(reloaded.result.current.prefs.keyCustomTouched[mac?'mac':'win']).toBe(true);
+  expect(reloaded.result.current.prefs.keyCustom[source]).toEqual(custom);
+  expect(reloaded.result.current.prefs.keyCustomTouched[source]).toBe(true);
   await act(async()=>reloaded.result.current.set('keyPreset','custom'));
   expect(stored[target].keyboard.preset).toBe('custom');
   expect(stored[target].keyboard.table).toContainEqual({from:0x700e0,to:0});
@@ -320,7 +320,7 @@ it('defaults sync unlock off and saves only that local input field',async()=>{
   }
 });
 
-it.each(['macos','windows'])('defaults source wheel lines on and persists only its local patch on %s', async platform => {
+it.each(['macos','windows','linux'])('defaults source wheel lines on and persists only its local patch on %s', async platform => {
   mocks.state={...mocks.state,boot:{platform}};
   const {result,unmount}=renderHook(usePreferences);
   expect(result.current.prefs.forwardWheelByLines).toBe(true);

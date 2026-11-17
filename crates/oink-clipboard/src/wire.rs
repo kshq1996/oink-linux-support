@@ -96,6 +96,7 @@ pub fn platform(value: ClipPlatform) -> &'static str {
     match value {
         ClipPlatform::Mac => "macos",
         ClipPlatform::Windows => "windows",
+        ClipPlatform::Linux => "linux",
         ClipPlatform::Unknown => "unknown",
     }
 }
@@ -103,6 +104,7 @@ fn local_platform(value: &str) -> v1::Result<ClipPlatform> {
     match value {
         "macos" => Ok(ClipPlatform::Mac),
         "windows" => Ok(ClipPlatform::Windows),
+        "linux" => Ok(ClipPlatform::Linux),
         _ => Ok(ClipPlatform::Unknown),
     }
 }
@@ -123,12 +125,12 @@ pub fn local_sensitivity(value: wire::Sensitivity) -> v1::Result<Sensitivity> {
         _ => Err(invalid()),
     }
 }
-
 pub fn format(value: &domain::NativeFormat) -> wire::FormatId {
     wire::FormatId(match value {
         domain::NativeFormat::Mac(name) => format!("mac-uti:{name}"),
         domain::NativeFormat::WindowsRegistered(name) => format!("win-name:{name}"),
         domain::NativeFormat::WindowsPredefined(id) => format!("win-cf:{id}"),
+        domain::NativeFormat::Linux(name) => format!("linux:{name}"),
         domain::NativeFormat::Unknown(name) => name.clone(),
     })
 }
@@ -137,6 +139,7 @@ fn local_format(value: wire::FormatId) -> v1::Result<domain::NativeFormat> {
     Ok(match namespace {
         "mac-uti" => domain::NativeFormat::Mac(name.into()),
         "win-name" => domain::NativeFormat::WindowsRegistered(name.into()),
+        "linux" => domain::NativeFormat::Linux(name.into()),
         "win-cf" => match name
             .parse::<u16>()
             .ok()

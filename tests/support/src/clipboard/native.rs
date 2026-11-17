@@ -14,21 +14,22 @@ use std::{
     path::Path,
 };
 fn platform() -> ClipPlatform {
-    if cfg!(target_os = "macos") {
-        ClipPlatform::Mac
-    } else {
-        ClipPlatform::Windows
-    }
+    ClipPlatform::local()
 }
 fn format(name: &str) -> NativeFormat {
     match platform() {
         ClipPlatform::Mac => NativeFormat::Mac(name.into()),
-        _ => NativeFormat::WindowsRegistered(name.into()),
+        ClipPlatform::Windows => NativeFormat::WindowsRegistered(name.into()),
+        ClipPlatform::Linux => NativeFormat::Linux(name.into()),
+        ClipPlatform::Unknown => NativeFormat::Unknown(name.into()),
     }
 }
 fn name(format: &NativeFormat) -> String {
     match format {
-        NativeFormat::Mac(n) | NativeFormat::WindowsRegistered(n) | NativeFormat::Unknown(n) => n.clone(),
+        NativeFormat::Mac(n)
+        | NativeFormat::WindowsRegistered(n)
+        | NativeFormat::Linux(n)
+        | NativeFormat::Unknown(n) => n.clone(),
         NativeFormat::WindowsPredefined(n) => format!("win-cf:{n}"),
     }
 }
@@ -209,7 +210,9 @@ pub(super) fn capture(fake: &FakeClipboard, _data: &Path) -> Result<oink_clipboa
                 id,
                 format: format(match platform() {
                     ClipPlatform::Mac => oink_clipboard::dedupe::MARKER_MAC,
-                    _ => oink_clipboard::dedupe::MARKER_WINDOWS,
+                    ClipPlatform::Windows => oink_clipboard::dedupe::MARKER_WINDOWS,
+                    ClipPlatform::Linux => oink_clipboard::dedupe::MARKER_LINUX,
+                    ClipPlatform::Unknown => oink_clipboard::dedupe::MARKER_LINUX,
                 }),
                 medium: Medium::Bytes,
                 aspect: 1,
@@ -239,7 +242,9 @@ pub(super) fn capture(fake: &FakeClipboard, _data: &Path) -> Result<oink_clipboa
             ClipData::Custom { platform, name, bytes } => (
                 match platform {
                     ClipPlatform::Mac => NativeFormat::Mac(name.clone()),
-                    _ => NativeFormat::WindowsRegistered(name.clone()),
+                    ClipPlatform::Windows => NativeFormat::WindowsRegistered(name.clone()),
+                    ClipPlatform::Linux => NativeFormat::Linux(name.clone()),
+                    ClipPlatform::Unknown => NativeFormat::Unknown(name.clone()),
                 },
                 oink_clipboard::formats::is_marker(*platform, name).then_some(StandardFormat::Privacy),
                 bytes.clone(),

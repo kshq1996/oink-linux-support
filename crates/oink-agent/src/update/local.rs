@@ -3,6 +3,8 @@ use std::path::PathBuf;
 #[derive(Debug)]
 pub(super) struct Staged {
     pub package: oink_update::local::Package,
+    // Only the Windows installer hands the staged copy to the elevated service.
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     pub path: PathBuf,
     pub _directory: tempfile::TempDir,
 }
@@ -64,7 +66,7 @@ pub(super) fn open(node: &Node, path: &str) -> ApiResult<UpdateStatus> {
         staged.package.validate(
             &state.status.version,
             state.status.current_build,
-            if cfg!(windows) { "x64" } else { "arm64" },
+            if cfg!(target_arch = "x86") { "x64" } else { "arm64" },
         )?;
         state.status.candidate = Some(staged.package.candidate());
         state.local = Some(staged);
@@ -82,6 +84,8 @@ pub(super) fn open(node: &Node, path: &str) -> ApiResult<UpdateStatus> {
     node.emit(ApiEvent::UpdateStatusChanged(status.clone()));
     Ok(status)
 }
+// Linux stages no local package, so the installer state stays untouched.
+#[cfg_attr(target_os = "linux", allow(unused_mut))]
 pub(super) fn install(node: &Node, expected: u64) -> ApiResult<UpdateStatus> {
     tracing::info!(step = "install_requested", expected_build = expected, "local upgrade");
     let mut state = lock(&node.inner.update);
@@ -133,6 +137,8 @@ pub(super) fn install(node: &Node, expected: u64) -> ApiResult<UpdateStatus> {
 
 /// The received store owns hydration and grant acquisition. Ordinary files use
 /// an ordinary user-session read; SYSTEM only ever receives the staged copy.
+// Only the macOS and Windows installers stage a local package.
+#[cfg(any(target_os = "macos", windows))]
 pub(super) fn copy_input(path: &Path, destination: &Path) -> Result<u64, Error> {
     if !path.is_absolute() {
         return Err(Error::WrongProduct);
@@ -152,6 +158,7 @@ pub(super) fn copy_input(path: &Path, destination: &Path) -> Result<u64, Error> 
     }
     copy_input_with(path, destination, oink_clipboard::received::open_file)
 }
+#[cfg(any(target_os = "macos", windows, test))]
 fn copy_input_with(
     path: &Path,
     destination: &Path,
@@ -191,6 +198,7 @@ fn copy_input_with(
     output.sync_all().map_err(|_| Error::Storage)?;
     Ok(count)
 }
+#[cfg(any(target_os = "macos", windows, test))]
 fn input_error(step: &'static str, error: std::io::Error) -> Error {
     tracing::info!(step, native_code=?error.raw_os_error(), detail=%error, "local package read unavailable");
     Error::PackageUnavailable

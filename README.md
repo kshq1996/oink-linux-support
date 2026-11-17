@@ -9,18 +9,27 @@
 
 **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
-Oink, short for "Oink Is Not only a KVM", is modern software that builds a peer-to-peer sharing network across multiple Windows and Mac computers. Use the keyboard, mouse and trackpad of any device to control any nearby device, with the same native feel everywhere; play the audio of several devices through the speakers or headphones connected to one of them; share the clipboard and drag and drop between devices; discover devices on the local network automatically; all traffic is encrypted by default.
+Oink, short for "Oink Is Not only a KVM", is modern software that builds a peer-to-peer sharing network across multiple Windows, Mac and Linux computers. Use the keyboard, mouse and trackpad of any device to control any nearby device, with the same native feel everywhere; play the audio of several devices through the speakers or headphones connected to one of them; share the clipboard and drag and drop between devices; discover devices on the local network automatically; all traffic is encrypted by default.
 
 ## Install
 
-Get installers and matching source from [GitHub Releases](https://github.com/oinkvm/oink/releases).
+Get installers and matching source from [GitHub Releases](https://github.com/kshq1996/oink-linux-support/releases).
 
 Supported operating systems and versions:
 
 - **Mac:** Apple silicon (arm64), macOS 14.2+; Intel (x64), macOS 14.2+ (untested)
 - **Windows:** x64, Windows 10 version 1809 (build 17763) or later, or Windows 11. Windows 10 versions before 22H2 are untested. Windows 10 LTSC (such as LTSC 2019 / LTSC 2021) does not include the WebView2 Runtime; install the Microsoft Edge WebView2 Runtime (Evergreen) first: https://developer.microsoft.com/microsoft-edge/webview2/
+- **Linux:** x64 and arm64, in a desktop session with X11 (or XWayland). Install the `.deb` package on Debian, Ubuntu and Linux Mint, or the `.rpm` package on Fedora, openSUSE and RHEL.
 
 If SmartScreen says "Windows protected your PC", use **More info → Run anyway** only if offered. UAC may show an unknown publisher.
+
+### Linux
+
+The Linux packages install three programs: the tray application `oink`, the command line tool `oink-agent` and the background process `oink-backend`. The package declares its runtime dependencies (WebKitGTK 4.1, GTK 3, libayatana-appindicator3), so the distribution package manager installs whatever is missing.
+
+The Linux backends use X11: input capture and injection through XRecord and XTest, the clipboard through the X11 selection protocol and the display layout through XRandR. A Wayland session works through XWayland. The cursor trail overlay that macOS and Windows draw is not available on Linux.
+
+System audio is not available on Linux yet: playing another device's audio on this device and sharing the microphone need a native audio backend, which Linux does not have yet. Everything else — keyboard, mouse, trackpad, clipboard, display layout and device discovery — works.
 
 ### Sponsor
 

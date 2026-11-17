@@ -111,12 +111,14 @@ export function mainKey(e: {
 const LABELS: Record<Platform, Record<string, string>> = {
     mac: { Control: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘', Space: 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Enter: '↩', Backspace: '⌫', Escape: 'Esc' },
     win: { Control: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win', Space: 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Enter: 'Enter', Backspace: 'Backspace', Escape: 'Esc' },
+    linux: { Control: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Super', Space: 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Enter: 'Enter', Backspace: 'Backspace', Escape: 'Esc' },
 };
 const SPOKEN: Record<Platform, Record<string, string>> = {
     mac: { Control: 'Control', Alt: 'Option', Shift: 'Shift', Meta: 'Command' },
     win: { Control: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Windows' },
+    linux: { Control: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Super' },
 };
-const ORDER: Record<Platform, Mod[]> = { mac: ['Control', 'Alt', 'Shift', 'Meta'], win: ['Meta', 'Control', 'Alt', 'Shift'] };
+const ORDER: Record<Platform, Mod[]> = { mac: ['Control', 'Alt', 'Shift', 'Meta'], win: ['Meta', 'Control', 'Alt', 'Shift'], linux: ['Meta', 'Control', 'Alt', 'Shift'] };
 export const splitKeys = (v: string) => v.split('+').filter(Boolean);
 const sortKeys = (p: Platform, keys: string[]) => [...ORDER[p].filter((m) => keys.includes(m)), ...keys.filter((k) => !isMod(k))];
 const mouseLabel = (key: string) => key === 'Mouse3' ? tr('鼠标中键') : key === 'Mouse4' ? tr('鼠标侧键 1') : key === 'Mouse5' ? tr('鼠标侧键 2') : undefined;

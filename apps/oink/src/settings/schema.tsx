@@ -10,7 +10,7 @@ export interface ItemMeta {
     label: Text;
     desc?: Text;
     keywords?: string;
-    only?: Platform;
+    only?: Platform | Platform[];
     parent?: string;
 }
 export interface SectionMeta {
@@ -55,7 +55,7 @@ export const SECTIONS: SectionMeta[] = [
                 }, get keywords() { return tr('登录 启动项 自启'); } },
             {
                 id: 'showInMenuBar', label: (p) => (p === 'mac' ? tr('在菜单栏展示') : tr('在系统托盘展示')),
-                desc: (p) => (p === 'mac' ? tr('关掉窗口后，也能从菜单栏的图标打开菜单和界面') : tr('关掉窗口后，也能从任务栏右侧的托盘图标打开菜单和界面')),
+                desc: (p) => (p === 'mac' ? tr('关掉窗口后，也能从菜单栏的图标打开菜单和界面') : p === 'linux' ? tr('关掉窗口后，也能从系统托盘的图标打开菜单和界面') : tr('关掉窗口后，也能从任务栏右侧的托盘图标打开菜单和界面')),
                 get keywords() { return tr('菜单栏 托盘 图标 tray'); },
             },
             { id: 'notificationLevel', get label() { return tr('通知级别'); }, get desc() { return tr('选择本机显示的通知详细程度'); } },
@@ -64,10 +64,10 @@ export const SECTIONS: SectionMeta[] = [
                 }, get desc() {
                     return tr('在其他设备上操作时，本机不会因为闲置而熄屏、锁屏');
                 }, get keywords() { return tr('休眠 熄屏 锁屏 唤醒 其它设备活动时，本机保持屏幕点亮 其他设备活动时，保持屏幕常亮'); } },
-            { id: 'autoUnlock', get label() { return tr('自动解锁本机'); },
+            { id: 'autoUnlock', only: ['mac', 'win'], get label() { return tr('自动解锁本机'); },
               get desc() { return tr('本机锁定时，从其它设备移入指针，或其它设备开启“同步解锁其它设备”后被解锁时，自动解锁本机。需要输入登录密码，密码加密储存在本地。'); },
               get keywords() { return tr('解锁 锁屏 密码 登录 自动登录 自动解锁'); } },
-            { id: 'syncUnlock', get label() { return tr('同步解锁其它设备'); },
+            { id: 'syncUnlock', only: ['mac', 'win'], get label() { return tr('同步解锁其它设备'); },
               get desc() { return tr('本机解锁后，同时解锁已开启“自动解锁本机”的其它设备。'); },
               get keywords() { return tr('解锁 同步解锁 锁屏 一起解锁 全部解锁'); } },
             { id: 'confirmQuit', get label() {
@@ -236,8 +236,8 @@ export const SECTIONS: SectionMeta[] = [
     },
     {
         id: 'tools', get title() { return tr('工具'); }, icon: <Icon name="settings"/>,
-        items: [{ id: 'pasteAsFile', get label() { return tr('在右键菜单添加“粘贴为文件”'); },
-            desc: p => p === 'mac' ? tr('复制图片、文本时，可在 Finder 中粘贴为文件') : tr('复制图片、文本时，可在资源管理器中粘贴为文件') }],
+        items: [{ id: 'pasteAsFile', only: ['mac', 'win'], get label() { return tr('在右键菜单添加“粘贴为文件”'); },
+            desc: p => p === 'mac' ? tr('复制图片、文本时，可在 Finder 中粘贴为文件') : tr('复制图片、文本时，可在资源管理器中粘贴为文件') }]
     },
     {
         id: 'permissions',
@@ -317,7 +317,7 @@ export const SECTIONS: SectionMeta[] = [
     },
 ];
 export const sectionsFor = (p: Platform, shortcuts = SHORTCUTS): SectionMeta[] => SECTIONS.filter((s) => !s.only || s.only === p)
-    .map((s) => ({ ...s, items: (s.id === 'shortcuts' ? shortcuts.filter(row=>!row.only || row.only===p).map(row=>({id:`sc-${row.id}`,label:row.label,desc:row.desc,keywords:`${tr('快捷键 热键')} ${row.keywords}`})) : s.items).filter((i: ItemMeta) => !i.only || i.only === p) }));
+    .map((s) => ({ ...s, items: (s.id === 'shortcuts' ? shortcuts.filter(row=>!row.only||row.only===p).map(row=>({id:`sc-${row.id}`,label:row.label,desc:row.desc,keywords:`${tr('快捷键 热键')} ${row.keywords}`})) : s.items).filter((i: ItemMeta) => !i.only || (Array.isArray(i.only) ? i.only.includes(p) : i.only === p)) }));
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '');
 export function searchSections(p: Platform, query: string, shortcuts = SHORTCUTS): Map<SectionId, Set<string> | 'all'> {
     const q = norm(query);

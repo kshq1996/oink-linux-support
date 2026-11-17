@@ -1,13 +1,16 @@
 # GPL-3.0-only first-party code. Every dependency expression is evaluated in full.
 [graph]
 all-features = true
-# Audit the complete runtime/build/test graphs for the two shipped targets.
-targets = ["aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+# Audit the complete runtime/build/test graphs for every shipped target.
+targets = ["aarch64-apple-darwin", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 
 [advisories]
 version = 2
 yanked = "deny"
-ignore = []
+# proc-macro-error is unmaintained, not vulnerable, and has no replacement.
+# It only enters the build graph through glib-macros, which the Linux system
+# tray pulls in via GTK; it never ships in a binary.
+ignore = ["RUSTSEC-2024-0370"]
 
 [licenses]
 version = 2

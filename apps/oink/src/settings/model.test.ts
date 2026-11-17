@@ -18,7 +18,7 @@ describe('target-specific key mapping edits',()=>{
 });
 
 describe('source mouse wheel direction',()=>{
-  it.each(['mac','win'] as const)('uses one local switch for every target from %s',platform=>{
+  it.each(['mac','win','linux'] as const)('uses one local switch for every target from %s',platform=>{
     const keyboard={preset:'none' as const,table:[]};
     const current:InputTransform={macos:{reverse_wheel:false,keyboard},windows:{reverse_wheel:false,keyboard},overrides:[{target:'same-os',reverse_wheel:false,keyboard},{target:'other-os',reverse_wheel:true,keyboard:null}]};
     for(const invert of [true,false]){
@@ -74,7 +74,7 @@ describe('custom mapping independent of active preset',()=>{
     expect(decoded.capsSplit).toBe(false);
     expect(decoded.map.keys.fn).toBe('rightAlt');
     expect(decoded.map.capsLong).toBe('none');
-    const prefs={...DEFAULT_PREFS,keyPreset:'custom' as const,keyCustomTouched:{mac:true,win:false},keyCustom:{...DEFAULT_PREFS.keyCustom,mac:decoded.map},capsSplit:decoded.capsSplit,allowFnMapping:decoded.allowFnMapping};
+    const prefs={...DEFAULT_PREFS,keyPreset:'custom' as const,keyCustomTouched:{mac:true,win:false,linux:false},keyCustom:{...DEFAULT_PREFS.keyCustom,mac:decoded.map},capsSplit:decoded.capsSplit,allowFnMapping:decoded.allowFnMapping};
     const edited=editTransform(current,'mac',prefs);
     expect(edited.windows.keyboard.saved_custom?.table).not.toContainEqual({from:0x700e4,to:0});
   });
@@ -83,7 +83,7 @@ describe('custom mapping independent of active preset',()=>{
     const keyboard={preset:'custom' as const,table:[hidden]};
     const override={target:'peer',reverse_wheel:null,keyboard};
     const current:InputTransform={macos:{reverse_wheel:true,keyboard},windows:{reverse_wheel:false,keyboard},overrides:[override]};
-    const prefs={...DEFAULT_PREFS,keyPreset:'custom' as const,keyCustomTouched:{mac:true,win:false}};
+    const prefs={...DEFAULT_PREFS,keyPreset:'custom' as const,keyCustomTouched:{mac:true,win:false,linux:false}};
     const custom=editTransform(current,'mac',prefs);
     const preset=editTransform(custom,'mac',{...prefs,keyPreset:'mac'});
     expect(preset.windows.keyboard.table).not.toContainEqual(hidden);
@@ -93,11 +93,11 @@ describe('custom mapping independent of active preset',()=>{
     expect(restored.macos).toBe(current.macos);
     expect(restored.overrides).toBe(current.overrides);
   });
-  it.each(['mac','win'] as const)('restores custom keys after both presets and a serialized reload on %s',platform=>{
+  it.each(['mac','win','linux'] as const)('restores custom keys after both presets and a serialized reload on %s',platform=>{
     const keyboard={preset:'none' as const,table:[]};
     let stored:InputTransform={macos:{reverse_wheel:false,keyboard},windows:{reverse_wheel:false,keyboard},overrides:[]};
-    const map=platform==='mac'?{keys:{control:'none',option:'ctrl',command:'rightAlt',shift:'win',caps:'none',fn:'rightWin'},capsLong:'none'}:{keys:{ctrl:'none',win:'option',alt:'shift',shift:'command',caps:'none'}};
-    const custom={...DEFAULT_PREFS,keyPreset:'custom' as const,keyCustomTouched:{mac:true,win:true},allowFnMapping:platform==='mac',capsSplit:platform==='mac',keyCustom:{...DEFAULT_PREFS.keyCustom,[platform]:map}};
+    const map=platform==='mac'?{keys:{control:'none',option:'ctrl',command:'rightAlt',shift:'win',caps:'none',fn:'rightWin'},capsLong:'none'}:platform==='linux'?{keys:{control:'none',super:'option',alt:'shift',shift:'command',caps:'none'}}:{keys:{ctrl:'none',win:'option',alt:'shift',shift:'command',caps:'none'}};
+    const custom={...DEFAULT_PREFS,keyPreset:'custom' as const,keyCustomTouched:{mac:true,win:true,linux:true},allowFnMapping:platform==='mac',capsSplit:platform==='mac',keyCustom:{...DEFAULT_PREFS.keyCustom,[platform]:map}};
     stored=editTransform(stored,platform,custom);
     const target=platform==='mac'?'windows':'macos';
     const expected=readKeyboardMapping(stored[target].keyboard,platform);
@@ -115,7 +115,7 @@ describe('custom mapping independent of active preset',()=>{
   it('retains disabled Fn and Caps assignments for the next enable after a preset reload',()=>{
     const keyboard={preset:'none' as const,table:[]};
     const stored:InputTransform={macos:{reverse_wheel:false,keyboard},windows:{reverse_wheel:false,keyboard},overrides:[]};
-    const prefs={...DEFAULT_PREFS,keyPreset:'custom' as const,keyCustomTouched:{mac:true,win:false},allowFnMapping:false,capsSplit:false,keyCustom:{...DEFAULT_PREFS.keyCustom,mac:{keys:{control:'none',fn:'rightAlt',caps:'shift'},capsLong:'none'}}};
+    const prefs={...DEFAULT_PREFS,keyPreset:'custom' as const,keyCustomTouched:{mac:true,win:false,linux:false},allowFnMapping:false,capsSplit:false,keyCustom:{...DEFAULT_PREFS.keyCustom,mac:{keys:{control:'none',fn:'rightAlt',caps:'shift'},capsLong:'none'}}};
     const active=editTransform(stored,'mac',prefs);
     const preset=JSON.parse(JSON.stringify(editTransform(active,'mac',{...prefs,keyPreset:'mac'})));
     const decoded=readKeyboardMapping(preset.windows.keyboard,'mac');

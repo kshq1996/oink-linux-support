@@ -245,7 +245,17 @@ fn thread_info() -> (u64, u8, i32) {
             (id, (pthread_main_np() != 0) as u8, -1)
         }
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: gettid and getpid are always safe to query.
+        unsafe {
+            let thread = libc::gettid() as u64;
+            let process = libc::getpid() as u64;
+            // The main thread of a process carries its process id.
+            (thread, (thread == process) as u8, -1)
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         (0, 0, -1)
     }

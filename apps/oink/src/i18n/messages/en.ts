@@ -606,6 +606,7 @@ export const en = {
   "在系统托盘展示": "Show in system tray",
   "关掉窗口后，也能从菜单栏的图标打开菜单和界面": "Use the menu bar icon to open the panel or window after closing it",
   "关掉窗口后，也能从任务栏右侧的托盘图标打开菜单和界面": "Use the system tray icon to open the panel or window after closing it",
+  "关掉窗口后，也能从系统托盘的图标打开菜单和界面": "Use the system tray icon to reopen the panel or window after closing it",
   "菜单栏 托盘 图标 tray": "menu bar tray icon notification area",
   "退出前确认": "Confirm before quitting",
   "从主界面退出 Oink 时二次确认": "Ask for confirmation when quitting Oink from the main window",

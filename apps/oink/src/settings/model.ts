@@ -6,13 +6,15 @@ import type { InputTransform, KeyboardMapping } from '../api/types';
 import { setLanguage } from '../i18n';
 import { shortcutId } from './Shortcuts';
 import { DEFAULT_PREFS, presetMap, type Prefs, type PrefsApi, type KeyMap } from './prefs';
+import { platformOf } from '../window/DesktopWindow';
+import type { Platform } from '../window/DesktopWindow';
 
 export type LocalPreferences = import('../api/cards').UiPreferences;
 /** Device-local UI preferences kept by this webview only (not backend or group data). */
 export interface PresentationPreferences { motion: 'auto' | 'reduced' | 'full'; hide_sponsor: boolean; compact_layout: boolean }
 export interface ReportStatus { configured:boolean;delivery_disabled:boolean;consent: {choice:'unasked'|'denied'|'granted';policy_version:number;generation:number} }
 const hid = (usage:number) => (7 << 16) | usage;
-const usage: Record<string,number> = {control:hid(224),ctrl:hid(224),shift:hid(225),option:hid(226),alt:hid(226),command:hid(227),win:hid(227),caps:hid(57),fn:0xff0003,none:0,rightCtrl:hid(228),rightShift:hid(229),rightAlt:hid(230),rightWin:hid(231)};
+const usage: Record<string,number> = {control:hid(224),ctrl:hid(224),shift:hid(225),option:hid(226),alt:hid(226),command:hid(227),win:hid(227),super:hid(227),caps:hid(57),fn:0xff0003,none:0,rightCtrl:hid(228),rightShift:hid(229),rightAlt:hid(230),rightWin:hid(231)};
 const keyCode = (key:string) => usage[key] ?? Number(key.replace(/^hid:/,''));
 function storePresentation(current: PresentationPreferences, patch: Partial<PresentationPreferences>): PresentationPreferences {
   let stored: Partial<PresentationPreferences> = {};
@@ -26,7 +28,7 @@ function readPresentation(): PresentationPreferences {
   try { const stored = JSON.parse(localStorage.getItem('oink:prefs') ?? '{}'); return { motion: ['auto','reduced','full'].includes(stored.motion) ? stored.motion : 'auto', hide_sponsor: stored.hide_sponsor === true, compact_layout: stored.compact_layout !== false }; }
   catch { return {motion:'auto',hide_sponsor:false,compact_layout:true}; }
 }
-export function editTransform(current: InputTransform, platform: 'mac'|'win', prefs: Prefs, reverseWheel?: boolean): InputTransform {
+export function editTransform(current: InputTransform, platform: Platform, prefs: Prefs, reverseWheel?: boolean): InputTransform {
   const target = platform === 'mac' ? 'windows' : 'macos';
   const previous=current[target].keyboard, map=prefs.keyCustom[platform];
   const entries=Object.entries(map.keys);
@@ -58,7 +60,7 @@ export function editTransform(current: InputTransform, platform: 'mac'|'win', pr
   return result;
 }
 /** Decode the source-owned table without inventing a disabled Fn identity mapping. */
-export function readKeyboardMapping(keyboard: KeyboardMapping, platform: 'mac'|'win') {
+export function readKeyboardMapping(keyboard: KeyboardMapping, platform: Platform) {
   const destinationNames=platform==='mac'?['ctrl','win','alt','shift','caps','none','rightCtrl','rightShift','rightAlt','rightWin']:['control','option','command','shift','caps','none'];
   const saved=keyboard.saved_custom,activeCustom=keyboard.preset==='custom';
   // Old writers preserve unknown metadata but can still edit the active table.
@@ -66,10 +68,12 @@ export function readKeyboardMapping(keyboard: KeyboardMapping, platform: 'mac'|'
   const table=activeCustom?keyboard.table:saved?.table??keyboard.table;
   const rememberedFn=saved?.table.find(m=>m.from===usage.fn);
   const allowFnMapping=platform==='mac'&&(activeCustom?keyboard.table.some(m=>m.from===usage.fn):saved?.allow_fn??false);
-  const sourceNames=platform==='mac'?['control','option','command','shift','caps',...(table.some(m=>m.from===usage.fn)||rememberedFn?['fn']:[])]:['ctrl','win','alt','shift','caps'];
+  const sourceNames=platform==='mac'?['control','option','command','shift','caps',...(table.some(m=>m.from===usage.fn)||rememberedFn?['fn']:[])]:platform==='linux'?['control','super','alt','shift','caps']:['ctrl','win','alt','shift','caps'];
   const name=(code:number)=>destinationNames.find(n=>usage[n]===code)??`hid:${code}`;
   const caps=activeCustom||!saved?keyboard.caps_tap_hold:null,hold=caps?.hold??saved?.caps_hold;
   const map:KeyMap={keys:Object.fromEntries(sourceNames.map(n=>[n,name(caps&&n==='caps'?caps.tap:table.find(m=>m.from===usage[n])?.to??(n==='fn'?rememberedFn?.to:undefined)??usage[n])])),capsLong:hold==null?undefined:name(hold)};
+  // The backend owns the active preset: it seeds one for a macOS or Windows
+  // source, and a source without one decodes to its own custom table.
   const keyPreset=keyboard.preset==='mac_feel'?'mac' as const:keyboard.preset==='win_feel'?'win' as const:'custom' as const;
   return {map,keyPreset,allowFnMapping,capsSplit:activeCustom?!!keyboard.caps_tap_hold:saved?.caps_split??!!keyboard.caps_tap_hold,hasCustom:!!saved||activeCustom};
 }
@@ -86,7 +90,7 @@ export function usePreferences(): PrefsApi {
   const busy = useRef(false), queued = useRef<Prefs|null>(null), committed = useRef(prefs), latest = useRef(prefs);
   latest.current = prefs;
   const local = state.localPreferences;
-  const platform = state.boot?.platform === 'windows' ? 'win' : 'mac';
+  const platform = platformOf(state.boot?.platform);
   useEffect(()=>{
     void api.group().then(group=>setTransform(group.members.find(m=>m.is_self)?.input_transform??null)).catch(()=>{});
     const refresh = () => {void Promise.allSettled([agent.query('launch',api.launchAtLoginStatus),agent.query('fileProvider',api.fileProviderStatus)]);};

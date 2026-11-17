@@ -9,18 +9,27 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | **한국어**
 
-Oink는 "Oink Is Not only a KVM"의 약자로, 여러 대의 Windows와 Mac 사이에 P2P 공유 네트워크를 구축하는 최신 소프트웨어입니다. 어느 기기의 키보드, 마우스, 트랙패드로든 가까운 다른 기기를 조작할 수 있으며, 어디서나 통일된 네이티브 조작감을 유지합니다. 여러 기기의 오디오를 한 기기에 연결된 스피커나 헤드폰으로 재생할 수 있고, 클립보드 공유와 기기 간 드래그 앤 드롭, 로컬 네트워크 기기 자동 검색을 지원하며, 모든 통신은 기본적으로 암호화됩니다.
+Oink는 "Oink Is Not only a KVM"의 약자로, 여러 대의 Windows, Mac, Linux 사이에 P2P 공유 네트워크를 구축하는 최신 소프트웨어입니다. 어느 기기의 키보드, 마우스, 트랙패드로든 가까운 다른 기기를 조작할 수 있으며, 어디서나 통일된 네이티브 조작감을 유지합니다. 여러 기기의 오디오를 한 기기에 연결된 스피커나 헤드폰으로 재생할 수 있고, 클립보드 공유와 기기 간 드래그 앤 드롭, 로컬 네트워크 기기 자동 검색을 지원하며, 모든 통신은 기본적으로 암호화됩니다.
 
 ## 설치
 
-[GitHub Releases](https://github.com/oinkvm/oink/releases)에서 설치 파일과 해당 소스 코드를 받을 수 있습니다.
+[GitHub Releases](https://github.com/kshq1996/oink-linux-support/releases)에서 설치 파일과 해당 소스 코드를 받을 수 있습니다.
 
 지원하는 운영체제와 버전:
 
 - **Mac**: Apple 실리콘(arm64), macOS 14.2 이상. Intel(x64), macOS 14.2 이상(테스트되지 않음)
 - **Windows**: x64, Windows 10 1809(빌드 17763) 이상 또는 Windows 11. 22H2 이전 Windows 10 버전은 테스트되지 않았습니다. Windows 10 LTSC(LTSC 2019 / LTSC 2021 등)에는 WebView2 Runtime이 기본으로 포함되지 않으므로, 먼저 Microsoft Edge WebView2 Runtime(Evergreen)을 설치하세요: https://developer.microsoft.com/microsoft-edge/webview2/
+- **Linux**: x64 및 arm64, X11(또는 XWayland)이 있는 데스크톱 세션 필요. Debian, Ubuntu, Linux Mint에서는 `.deb` 패키지를, Fedora, openSUSE, RHEL에서는 `.rpm` 패키지를 설치합니다.
 
 SmartScreen에 "Windows의 PC 보호" 메시지가 표시되면, 해당 옵션이 있을 때만 **추가 정보 → 실행**을 선택하세요. UAC에서 게시자를 알 수 없음으로 표시될 수 있습니다.
+
+### Linux
+
+Linux 패키지는 세 가지 프로그램을 설치합니다: 트레이 애플리케이션 `oink`, 명령줄 도구 `oink-agent`, 백그라운드 프로세스 `oink-backend`. 패키지는 런타임 의존성(WebKitGTK 4.1, GTK 3, libayatana-appindicator3)을 선언하므로 배포판 패키지 관리자가 빠진 부분을 설치합니다.
+
+Linux 백엔드는 X11을 사용합니다: 입력 캡처와 주입은 XRecord와 XTest, 클립보드는 X11 선택 프로토콜, 디스플레이 배치는 XRandR을 사용합니다. Wayland 세션에서는 XWayland를 통해 동작합니다. macOS와 Windows가 그리는 커서 트레일 오버레이는 Linux에서 사용할 수 없습니다.
+
+시스템 오디오는 Linux에서 아직 사용할 수 없습니다. 다른 기기의 오디오를 이 기기에서 재생하거나 마이크를 공유하려면 네이티브 오디오 백엔드가 필요한데, Linux에는 아직 없습니다. 키보드, 마우스, 트랙패드, 클립보드, 디스플레이 배치, 기기 탐색 등 나머지 기능은 모두 동작합니다.
 
 ### 후원
 

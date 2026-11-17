@@ -24,7 +24,7 @@ impl Startup {
     pub(crate) fn ready(&self) -> bool {
         matches!(*self.0.borrow(), Some(Ok(())))
     }
-    #[cfg(any(windows, test))]
+    #[cfg(any(windows, target_os = "linux", test))]
     pub(crate) fn finish(&self, result: Result<(), String>) {
         self.0.send_replace(Some(result));
     }
@@ -41,7 +41,7 @@ impl Startup {
         }
     }
 }
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 const START_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// 程序入口：按命令行参数选择服务进程、停止服务或界面。返回 `None` 表示运行界面。
@@ -144,6 +144,62 @@ pub fn start_once(api: &RemoteApi, exe: &Path) -> Result<(), String> {
         match api.hello_with_timeout(Duration::from_millis(100)) {
             Ok(info) if launched.as_ref().is_none_or(|process| process.id() == info.pid) => {
                 return validate_running_backend(api);
+            }
+            Ok(_) => {}
+            Err(error) if api.build_mismatch() => return Err(error.to_string()),
+            Err(_) => {}
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Starts the backend that ships next to this executable and waits until it
+/// publishes its IPC endpoint. A backend that already owns this data
+/// directory is reused instead of starting a second one.
+#[cfg(target_os = "linux")]
+pub fn start_backend(api: &RemoteApi) -> Result<(), String> {
+    let mut seen_owner = false;
+    let mut launched = match oink_agent::instance::is_running(api.data_dir()) {
+        Some(true) => {
+            seen_owner = true;
+            None
+        }
+        Some(false) => Some(
+            oink_agent::backend::launch::start_backend_tracked(api.data_dir())
+                .map_err(|e| format!("backend launch failed: {e}"))?,
+        ),
+        None => return Err("backend_ownership_unavailable".into()),
+    };
+    let deadline = Instant::now() + START_TIMEOUT;
+    loop {
+        if let Some(process) = &mut launched
+            && let Some(code) = process
+                .exit_code()
+                .map_err(|e| format!("backend exit query failed: {e}"))?
+        {
+            return Err(format!("backend_exited:{code}"));
+        }
+        // The backend owns the data directory once it starts; the endpoint
+        // file follows. Keep reading it while that owner lives: the launch
+        // deadline only bounds acquiring ownership, not publication.
+        let owned = match oink_agent::instance::is_running(api.data_dir()) {
+            Some(true) => {
+                seen_owner = true;
+                true
+            }
+            Some(false) if seen_owner && launched.is_none() => return Err("backend_unavailable".into()),
+            Some(false) if Instant::now() >= deadline => return Err("backend_start_timeout".into()),
+            Some(false) => false,
+            None => return Err("backend_ownership_unavailable".into()),
+        };
+        if !owned {
+            std::thread::sleep(Duration::from_millis(100));
+            continue;
+        }
+        api.reset_connections();
+        match api.hello_with_timeout(Duration::from_millis(100)) {
+            Ok(info) if launched.as_ref().is_none_or(|process| process.id() == info.pid) => {
+                return Ok(());
             }
             Ok(_) => {}
             Err(error) if api.build_mismatch() => return Err(error.to_string()),

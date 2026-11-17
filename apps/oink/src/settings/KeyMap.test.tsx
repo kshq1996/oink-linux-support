@@ -16,6 +16,10 @@ function Mapping({ observed, initial }: { observed: boolean | null; initial?: Pr
   const [prefs, setPrefs] = useState(initial ?? { ...DEFAULT_PREFS, keyPreset: 'mac' });
   return <OinkProvider defaultMotion="reduced"><KeyMapControl platform="mac" api={{ prefs, setPrefs } as PrefsApi} capsIme={observed} label="Windows key mapping" onLog={() => {}} /></OinkProvider>;
 }
+function LinuxMapping({ initial }: { initial?: Prefs }) {
+  const [prefs, setPrefs] = useState(initial ?? { ...DEFAULT_PREFS, keyPreset: 'mac' });
+  return <OinkProvider defaultMotion="reduced"><KeyMapControl platform="linux" api={{ prefs, setPrefs } as PrefsApi} capsIme={null} label="macOS key mapping" onLog={() => {}} /></OinkProvider>;
+}
 describe('native Caps mapping presentation', () => {
   it.each(['en', 'zh-Hans'] as const)('shows Caps Lock for an unavailable observation in %s', language => {
     setLanguage(language);
@@ -78,5 +82,24 @@ describe('custom None and Fn choices', () => {
     expect(screen.getByRole('menuitemradio', { name: 'Right Ctrl' })).toBeTruthy();
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'None' }));
     expect(container.querySelector('[data-key="fn"] .kmap__to')?.textContent).toBe('None');
+  });
+});
+
+describe('the Linux source keys', () => {
+  it('names the Linux modifiers and maps them onto the Mac target names', () => {
+    setLanguage('en');
+    const { container } = render(<LinuxMapping/>);
+    expect([...container.querySelectorAll('.kmap__from > span:first-child')].map(name => name.textContent)).toEqual(['Caps Lock', 'Shift', 'Control', 'Super', 'Alt']);
+    expect(container.querySelector('[data-key="control"] .kmap__to')?.textContent).toBe('command');
+    expect(container.querySelector('[data-key="super"] .kmap__to')?.textContent).toBe('control');
+    expect(container.querySelector('[data-key="alt"] .kmap__to')?.textContent).toBe('option');
+  });
+  it('keeps Control and swaps Alt with Super in the Windows feel', () => {
+    setLanguage('en');
+    const { container } = render(<LinuxMapping/>);
+    fireEvent.click(screen.getByRole('radio', { name: 'Windows feel' }));
+    expect(container.querySelector('[data-key="control"] .kmap__to')?.textContent).toBe('control');
+    expect(container.querySelector('[data-key="super"] .kmap__to')?.textContent).toBe('option');
+    expect(container.querySelector('[data-key="alt"] .kmap__to')?.textContent).toBe('command');
   });
 });

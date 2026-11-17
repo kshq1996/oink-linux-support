@@ -2,7 +2,7 @@ import { tr } from '../i18n';
 import type { CSSProperties } from 'react';
 import { DropdownMenu, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, Row, Segmented, Switch } from 'oink-ui';
 import type { Platform } from '../window/DesktopWindow';
-import { KEY_NAMES, MAC_KEYS, WIN_KEYS, presetMap } from './prefs';
+import { KEY_NAMES, LINUX_KEYS, MAC_KEYS, WIN_KEYS, presetMap } from './prefs';
 import type { KeyMap, KeyPreset, PrefsApi } from './prefs';
 type Cap = {
     id?: string;
@@ -19,6 +19,11 @@ const ROWS: Record<Platform, Cap[][]> = {
         [{ id: 'caps', u: 1.75 }, { u: 1, ghost: 'A' }, { u: 1, ghost: 'S' }, { u: 1, ghost: 'D' }],
         [{ id: 'shift', u: 2.25 }, { u: 1, ghost: 'Z' }, { u: 1, ghost: 'X' }],
         [{ id: 'ctrl', u: 1.25 }, { id: 'win', u: 1 }, { id: 'alt', u: 1 }, { u: 3, ghost: '' }],
+    ],
+    linux: [
+        [{ id: 'caps', u: 1.75 }, { u: 1, ghost: 'A' }, { u: 1, ghost: 'S' }, { u: 1, ghost: 'D' }],
+        [{ id: 'shift', u: 2.25 }, { u: 1, ghost: 'Z' }, { u: 1, ghost: 'X' }],
+        [{ id: 'control', u: 1.25 }, { id: 'super', u: 1 }, { id: 'alt', u: 1 }, { u: 3, ghost: '' }],
     ],
 };
 const targetName = (platform: Platform, t: string) => {
@@ -39,7 +44,7 @@ export function KeyMapControl({ platform, api, capsIme, label, onLog }: {
     const split = platform === 'mac' && custom && prefs.capsSplit;
     const map: KeyMap = custom ? prefs.keyCustom[platform] : presetMap(platform, preset, capsIme === true);
     const targets = platform === 'mac' ? ['ctrl', 'win', 'alt', 'shift', 'caps'] : ['control', 'option', 'command', 'shift', 'caps'];
-    const sources: string[] = platform === 'mac' ? [...MAC_KEYS, ...(custom && prefs.allowFnMapping ? ['fn'] : [])] : WIN_KEYS;
+    const sources: string[] = platform === 'mac' ? [...MAC_KEYS, ...(custom && prefs.allowFnMapping ? ['fn'] : [])] : platform === 'linux' ? LINUX_KEYS : WIN_KEYS;
     const choosePreset = (v: KeyPreset) => {
         setPrefs((p) => {
             if (v === 'custom' && !p.keyCustomTouched[platform] && p.keyPreset !== 'custom') {

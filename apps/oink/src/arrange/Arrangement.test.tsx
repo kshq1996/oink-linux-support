@@ -439,6 +439,9 @@ describe('canvas key hints', () => {
     rerender(<Arrangement {...props} selectedId="one" platform="win"/>);
     expect(container.querySelector('.arr__keys')?.textContent).toContain(`Ctrl${resize}`);
     expect(container.querySelector('.arr__keys')?.textContent).not.toContain('⌘');
+    rerender(<Arrangement {...props} selectedId="one" platform="linux"/>);
+    expect(container.querySelector('.arr__keys')?.textContent).toContain(`Ctrl${resize}`);
+    expect(container.querySelector('.arr__keys')?.textContent).not.toContain('⌘');
     rerender(<Arrangement {...props} selectedId="missing"/>);
     expect(container.querySelector('.arr__keys')).toBeNull();
   });

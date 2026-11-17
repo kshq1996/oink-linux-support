@@ -53,6 +53,9 @@ thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+# Linux X11 client. Pure Rust: no libX11/libXtst build dependency, so the
+# Linux image only needs the runtime packages the desktop session provides.
+x11rb = { version = "0.13", default-features = false, features = ["record", "xtest", "xfixes", "xkb", "randr"] }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

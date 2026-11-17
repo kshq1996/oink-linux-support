@@ -1,4 +1,7 @@
 //! Display-only receipts, never installation or ownership authority.
+//! The microphone plugin belongs to the macOS and Windows audio backends, so
+//! its receipts stay unused in a Linux build.
+#![cfg_attr(target_os = "linux", allow(dead_code))]
 use super::MicrophonePluginStep;
 use serde::Deserialize;
 #[derive(Deserialize)]

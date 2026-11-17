@@ -14,6 +14,10 @@ thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# XRandR monitor enumeration for Linux sessions.
+x11rb.workspace = true
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-core-foundation = "0.3"

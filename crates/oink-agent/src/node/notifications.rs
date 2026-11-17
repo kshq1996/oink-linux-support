@@ -433,7 +433,7 @@ impl Node {
         }
     }
     fn notification_language(&self) -> crate::config::UiLanguage {
-        self.settings().ui_language.resolve(&system_language())
+        self.settings().ui_language.resolve(&crate::locale::system_language())
     }
     fn notification_click(&self, click: Click) {
         let origin = { lock(&self.inner.notifications).origins.remove(&click.id) };
@@ -849,41 +849,6 @@ fn copy(language: crate::config::UiLanguage, kind: u8) -> &'static str {
             "Shared microphone unmuted",
         ][index],
     }
-}
-#[cfg(target_os = "macos")]
-fn system_language() -> String {
-    objc2_foundation::NSLocale::preferredLanguages()
-        .firstObject()
-        .map_or_else(String::new, |s| s.to_string())
-}
-#[cfg(windows)]
-fn system_language() -> String {
-    use windows::{
-        Win32::Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME},
-        core::PWSTR,
-    };
-    let (mut count, mut length) = (0, 0);
-    // SAFETY: sizing query writes only count/length and does not access a buffer.
-    unsafe {
-        if GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, None, &mut length).is_err() {
-            return String::new();
-        }
-    }
-    let mut buffer = vec![0u16; length as usize];
-    // SAFETY: UTF-16 output buffer has the capacity reported by the sizing call.
-    unsafe {
-        if GetUserPreferredUILanguages(
-            MUI_LANGUAGE_NAME,
-            &mut count,
-            Some(PWSTR(buffer.as_mut_ptr())),
-            &mut length,
-        )
-        .is_err()
-        {
-            return String::new();
-        }
-    }
-    String::from_utf16_lossy(buffer.split(|ch| *ch == 0).next().unwrap_or(&[]))
 }
 
 #[cfg(all(test, debug_assertions))]

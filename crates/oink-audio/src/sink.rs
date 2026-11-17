@@ -1,5 +1,8 @@
 //! Native-cadenced receiver/decoder/mixer. Session routing, media admission,
 //! logs and device lifetime stay on the owning ordinary thread.
+//! The native playback backends exist on macOS and Windows only, so the
+//! machinery they drive is unused in a Linux build.
+#![cfg_attr(target_os = "linux", allow(dead_code))]
 use crate::{
     dsp, handoff,
     playback::{FadeOut, Playback, PlaybackInfo, PlaybackMetrics, PlaybackOptions, PullBlock, PullInput},

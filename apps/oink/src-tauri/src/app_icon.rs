@@ -7,7 +7,9 @@ use oink_agent::{
 };
 use tauri::{AppHandle, Manager};
 
-use crate::icon_render::{Appearance, Artwork, render};
+use crate::icon_render::Appearance;
+#[cfg(any(target_os = "macos", windows))]
+use crate::icon_render::{Artwork, render};
 
 #[derive(Default)]
 pub(crate) struct AppIcon {
@@ -16,7 +18,7 @@ pub(crate) struct AppIcon {
     applied: Mutex<Option<Appearance>>,
     #[cfg(windows)]
     windows: Mutex<std::collections::HashMap<String, platform::WindowIcons>>,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     tray: Mutex<Option<(Appearance, u32, oink_agent::tray::TrayLook)>>,
 }
 
@@ -25,7 +27,7 @@ struct Settings {
     mode: ThemeMode,
     accent: ThemeAccent,
     system_dark: bool,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     tray_presentation: oink_agent::tray::TrayPresentation,
 }
 
@@ -44,7 +46,7 @@ pub(crate) fn initialize(app: &AppHandle) {
             Ok(value) => preferences(app, &value),
             Err(error) => tracing::warn!(%error, "initial application appearance unavailable"),
         }
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         match api.device_cards() {
             Ok(view) => {
                 app.state::<AppIcon>()
@@ -109,6 +111,24 @@ pub(crate) fn refresh(app: &AppHandle) {
             prepare_window(app, window);
         }
     }
+
+    #[cfg(target_os = "linux")]
+    {
+        let state = app.state::<AppIcon>();
+        if let Some(tray) = app.tray_by_id("main") {
+            let settings = state.settings.lock().unwrap();
+            let appearance = tray_appearance(&settings);
+            let key = (appearance, platform::tray_size(app), settings.tray_presentation.look);
+            drop(settings);
+            let mut applied = state.tray.lock().unwrap();
+            if *applied != Some(key) {
+                match tray_image(app).and_then(|icon| tray.set_icon(Some(icon)).map_err(|e| e.to_string())) {
+                    Ok(()) => *applied = Some(key),
+                    Err(error) => tracing::warn!(%error, "could not update tray icon"),
+                }
+            }
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -134,7 +154,7 @@ pub(crate) fn dock(app: &AppHandle, force: bool) {
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn tray_created(app: &AppHandle) {
     if let Err(error) = platform::watch_tray_metrics(app) {
         tracing::warn!(%error, "tray display notifications unavailable");
@@ -142,18 +162,30 @@ pub(crate) fn tray_created(app: &AppHandle) {
     refresh(app);
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn tray_image(app: &AppHandle) -> Result<tauri::image::Image<'static>, String> {
     let state = app.state::<AppIcon>();
-    let mut settings = state.settings.lock().unwrap();
-    settings.system_dark = oink_agent::appearance::system_dark();
-    let appearance = tray_appearance(&settings);
-    let look = settings.tray_presentation.look;
-    drop(settings);
+    let (appearance, look) = tray_state(app, &state);
     let png = crate::icon_render::render_tray(look, appearance, platform::tray_size(app))?
         .encode_png()
         .map_err(|e| e.to_string())?;
     tauri::image::Image::from_bytes(&png).map_err(|e| e.to_string())
+}
+
+/// The ink and the accent of the tray icon, and the state it shows.
+#[cfg(windows)]
+fn tray_state(_app: &AppHandle, state: &AppIcon) -> (Appearance, oink_agent::tray::TrayLook) {
+    let mut settings = state.settings.lock().unwrap();
+    settings.system_dark = oink_agent::appearance::system_dark();
+    (tray_appearance(&settings), settings.tray_presentation.look)
+}
+
+/// Linux follows the desktop theme the window reported; Windows reads the
+/// shell theme on every paint.
+#[cfg(target_os = "linux")]
+fn tray_state(_app: &AppHandle, state: &AppIcon) -> (Appearance, oink_agent::tray::TrayLook) {
+    let settings = state.settings.lock().unwrap();
+    (tray_appearance(&settings), settings.tray_presentation.look)
 }
 
 #[cfg(windows)]
@@ -164,7 +196,31 @@ fn tray_appearance(settings: &Settings) -> Appearance {
     }
 }
 
-#[cfg(windows)]
+/// The status area follows the desktop theme, like the Windows taskbar area
+/// follows the shell theme: the ink has to contrast with the panel.
+#[cfg(target_os = "linux")]
+fn tray_appearance(settings: &Settings) -> Appearance {
+    Appearance {
+        dark: settings.system_dark,
+        accent: settings.appearance().accent,
+    }
+}
+
+/// The desktop theme reaches this process through the window: XDG's portal
+/// reports the colour scheme and the window follows it. The query blocks on
+/// the portal, so it never runs on the UI thread.
+#[cfg(target_os = "linux")]
+pub(crate) fn window_theme(app: &AppHandle, window: &tauri::WebviewWindow) {
+    let handle = app.clone();
+    let window = window.clone();
+    std::thread::spawn(move || {
+        if let Ok(theme) = window.theme() {
+            theme_changed(&handle, theme);
+        }
+    });
+}
+
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn device_cards(app: &AppHandle, view: &oink_agent::device_cards::DeviceCardsView) {
     let view = view.clone();
     crate::app::on_main(app, move |app| {
@@ -212,6 +268,25 @@ mod platform {
         // its main thread. This changes only the running process's Dock image.
         unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&image)) };
         Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod platform {
+    use super::*;
+
+    /// A Linux status area reports no display changes: the panel scales the
+    /// icon itself, and the desktop theme arrives through the window.
+    pub(super) fn watch_tray_metrics(_app: &AppHandle) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// The status area shows the same tray artwork as the other desktops.
+    /// A Linux panel is 22 to 24 logical pixels tall, so the fixed 32 pixel
+    /// icon matches the macOS status item's retina representation and stays
+    /// crisp on a scaled panel.
+    pub(super) fn tray_size(_app: &AppHandle) -> u32 {
+        32
     }
 }
 

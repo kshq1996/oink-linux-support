@@ -35,8 +35,34 @@ pub enum ClipData {
 pub enum ClipPlatform {
     Mac,
     Windows,
+    /// Linux desktops. The clipboard offers MIME targets instead of a private
+    /// format registry, so its native contract is the portable one.
+    Linux,
     /// An open wire platform without a native reconstruction contract here.
     Unknown,
+}
+
+impl ClipPlatform {
+    /// The platform this build runs on. A build without a native clipboard
+    /// contract reports `Unknown` and exchanges portable content only.
+    pub const fn local() -> Self {
+        #[cfg(target_os = "macos")]
+        {
+            Self::Mac
+        }
+        #[cfg(target_os = "windows")]
+        {
+            Self::Windows
+        }
+        #[cfg(target_os = "linux")]
+        {
+            Self::Linux
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        {
+            Self::Unknown
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

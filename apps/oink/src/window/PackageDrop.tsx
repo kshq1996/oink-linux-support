@@ -9,8 +9,10 @@ const subscribe=(listener:()=>void)=>{listeners.add(listener);return()=>{listene
 export function setPackageDrag(value:boolean) {if(active===value)return;active=value;listeners.forEach(listener=>listener());}
 export const usePackageDrag=()=>useSyncExternalStore(subscribe,()=>active);
 export function localPackagePath(paths:readonly string[],platform:Platform|'any'='any'):string|null {
-  const extension=platform==='mac'?/\.dmg$/i:platform==='win'?/\.msi$/i:/\.(dmg|msi)$/i;
-  return paths.length===1&&extension.test(paths[0])?paths[0]:null;
+  // The backend stages macOS disk images and Windows installers only, so a
+  // Linux host accepts no package at all.
+  const extension=platform==='mac'?/\.dmg$/i:platform==='win'?/\.msi$/i:platform==='linux'?null:/\.(dmg|msi)$/i;
+  return paths.length===1&&extension!==null&&extension.test(paths[0])?paths[0]:null;
 }
 /** Enter supplies filenames on Wry's filesystem path. Over supplies positions
  * only, so retain Enter's decision; an empty list means unavailable names. */
@@ -42,6 +44,8 @@ export function usePackageDropReceiver(platform:Platform,receive:(path:string)=>
   },[platform]);
 }
 export function PackageDropArea({platform}:{platform:Platform}) {
+  // No installer format is staged on Linux, so the drop area never appears.
+  if (platform === 'linux') return null;
   return <div className="package-drop" data-platform={platform}><div className="package-drop__area" role="region" aria-label={tr('放下安装包以更新 Oink')}>
     <Icon name="download"/><strong>{tr('放下安装包以更新 Oink')}</strong>
     <span>{tr(platform==='mac'?'支持 Oink 的 .dmg 安装包':'支持 Oink 的 .msi 安装包')}</span>

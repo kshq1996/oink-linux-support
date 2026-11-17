@@ -47,6 +47,47 @@ pub fn preferred_languages() -> Vec<String> {
     })
 }
 
+/// The desktop's language list lives in the environment: LANGUAGE holds an
+/// ordered list of languages, and the locale categories hold one value each.
+#[cfg(target_os = "linux")]
+pub fn preferred_languages() -> Vec<String> {
+    let mut values: Vec<String> = std::env::var("LANGUAGE")
+        .unwrap_or_default()
+        .split(':')
+        .map(str::to_owned)
+        .collect();
+    for name in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(value) = std::env::var(name) {
+            values.push(value);
+        }
+    }
+    let mut languages: Vec<String> = Vec::new();
+    for value in values {
+        let Some(tag) = tag(&value) else {
+            continue;
+        };
+        if !languages.contains(&tag) {
+            languages.push(tag);
+        }
+    }
+    if languages.is_empty() {
+        // The C and POSIX locales name no language: the interface is English.
+        languages.push("en-US".to_owned());
+    }
+    languages
+}
+
+/// A POSIX locale names a language, a territory and a codeset; the product
+/// reads BCP 47 tags.
+#[cfg(target_os = "linux")]
+fn tag(value: &str) -> Option<String> {
+    let value = value.split(['.', '@']).next().unwrap_or(value).trim();
+    if value.is_empty() || value.eq_ignore_ascii_case("C") || value.eq_ignore_ascii_case("POSIX") {
+        return None;
+    }
+    Some(value.replace('_', "-"))
+}
+
 #[cfg(any(target_os = "macos", test))]
 pub fn auto_language() -> UiLanguage {
     UiLanguage::Auto.resolve(preferred_languages().first().map(String::as_str).unwrap_or(""))

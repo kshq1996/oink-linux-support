@@ -28,6 +28,7 @@ pub mod instance;
 pub mod ipc;
 pub mod layout_profiles;
 pub mod layout_sync;
+mod locale;
 pub mod logs;
 
 pub mod node;

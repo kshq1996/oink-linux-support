@@ -12,6 +12,8 @@ pub struct Feedback {
     /// Pointer is over the visible toast card, including Undo.
     pub toast_hovered: bool,
 }
+// The native renderers own the pointer state; Linux has no overlay.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Input {
     Move(Point),
@@ -19,6 +21,7 @@ pub(super) enum Input {
     Up(Point),
     Leave,
 }
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 #[derive(Debug, Default)]
 pub(super) struct HitState {
     pub id: u64,
@@ -29,6 +32,7 @@ pub(super) struct HitState {
     toast_hovered: bool,
     mask: Option<Frame>,
 }
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 impl HitState {
     pub fn update(&mut self, id: u64, undo: Option<Rect>, interactive: bool) {
         if self.id != id || !interactive {

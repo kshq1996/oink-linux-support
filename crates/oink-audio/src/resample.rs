@@ -3,6 +3,9 @@
 //! Larger downsampling ratios scale its support to preserve the audible passband.
 //! Tables are prepared off the audio thread. Adjacent phases are interpolated
 //! to avoid phase-quantisation distortion as asynchronous clocks move.
+//! The native audio backends exist on macOS and Windows only, so the resampler
+//! they drive is unused in a Linux build.
+#![cfg_attr(target_os = "linux", allow(dead_code))]
 const TAPS: usize = 96;
 const PHASES: usize = 1024;
 

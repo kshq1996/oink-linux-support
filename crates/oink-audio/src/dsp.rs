@@ -1,4 +1,7 @@
 //! Bounded audio transport DSP with explicit negotiated Opus and PCM profiles.
+//! The native capture and playback backends exist on macOS and Windows only,
+//! so the machinery they drive is unused in a Linux build.
+#![cfg_attr(target_os = "linux", allow(dead_code))]
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 

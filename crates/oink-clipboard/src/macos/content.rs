@@ -724,12 +724,11 @@ fn foreign_names(rep: &Representation) -> Vec<String> {
         Some(StandardFormat::Rtf) => vec!["public.rtf".into()],
         Some(StandardFormat::Png) => vec!["public.png".into()],
         Some(StandardFormat::Privacy) => {
-            let (NativeFormat::WindowsRegistered(name), RepresentationData::Inline(bytes)) = (&rep.format, &rep.data)
-            else {
+            let Some((platform, name, bytes)) = crate::formats::privacy_rep(rep) else {
                 return Vec::new();
             };
             crate::formats::for_platform(
-                &[crate::formats::custom(ClipPlatform::Windows, name, bytes.clone())],
+                &[crate::formats::custom(platform, &name, bytes)],
                 ClipPlatform::Mac,
                 crate::Sensitivity::Normal,
             )

@@ -1,5 +1,8 @@
 //! Device-cadenced auxiliary audio workers. Native callbacks only signal the
 //! coalescing wakeup; heap/OS object creation and destruction stay outside work.
+//! The native audio backends exist on macOS and Windows only, so the workers
+//! they drive are unused in a Linux build.
+#![cfg_attr(target_os = "linux", allow(dead_code))]
 use std::{
     marker::PhantomData,
     rc::Rc,
@@ -52,17 +55,26 @@ impl Signal {
         if self.0.pending.swap(true, Ordering::Release) {
             return;
         }
-        #[cfg(target_os = "macos")]
+        self.signal();
+    }
+    /// Wake the worker that waits for work. Linux has no wake primitive, so
+    /// the worker polls instead.
+    #[cfg(target_os = "macos")]
+    fn signal(&self) {
         // SAFETY: Arc keeps the OS semaphore live for this call.
         unsafe {
             oink_audio_wake_signal(self.0.handle);
         }
-        #[cfg(windows)]
+    }
+    #[cfg(windows)]
+    fn signal(&self) {
         // SAFETY: Arc keeps this event live; SetEvent does not wait for a peer.
         unsafe {
             let _ = wake_set_event(self.0.handle.0);
         }
     }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    fn signal(&self) {}
     /// Scheduling boundary only; never called in a work unit. There is one
     /// waiter per Signal. A stop request must notify it before joining.
     pub fn wait(&self) -> Result<(), i32> {

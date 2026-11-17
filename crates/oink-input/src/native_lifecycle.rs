@@ -1,5 +1,7 @@
 //! Numeric native lifecycle observations. Producers never format, log,
 //! allocate or wait for the consumer. A full queue drops records and counts loss.
+// Only the macOS and Windows backends publish button transitions so far.
+#![cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
 use crossbeam_queue::ArrayQueue;
 use oink_foundation::{DeviceId, snapshot::Snapshot};
 use serde::{Deserialize, Serialize};

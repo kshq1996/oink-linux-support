@@ -16,6 +16,10 @@ pub const MARKER_APPLE: &str = "com.hachiwii.oink.clip";
 /// Registered clipboard format on Windows (names starting with "Oink" are never
 /// re-created from another machine's offer).
 pub const MARKER_WINDOWS: &str = "Oink Clip";
+/// Synthetic private target on Linux. The X11 clipboard has no format
+/// registry the supported toolchain can publish, so the Linux backend keeps
+/// the marker of its own write in process memory under this identity.
+pub const MARKER_LINUX: &str = "x-oink-clip";
 /// Record magic of the 0.3.x line (wire protocol v1 offer identities). 0.4.0
 /// writes `OKC1` records for its protocol-v2 identities under the same format
 /// names; the two lines do not interoperate on the network, but a marker can

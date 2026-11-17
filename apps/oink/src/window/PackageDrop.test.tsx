@@ -40,6 +40,16 @@ it('filters single package names for the receiving platform during drag-over and
   expect(packageDragAllowed(['/Oink.msi'],'mac')).toBe(false);
   expect(packageDragAllowed(['/Oink.dmg'],'win')).toBe(false);
 });
+it('stages no package on Linux, where no installer format exists',()=>{
+  expect(localPackagePath(['/Oink.dmg'],'linux')).toBeNull();
+  expect(localPackagePath(['C:\\Oink.msi'],'linux')).toBeNull();
+  expect(packageDragAllowed(['/Oink.dmg'],'linux')).toBe(false);
+  expect(packageDragAllowed(['/Oink.msi'],'linux')).toBe(false);
+  setLanguage('en');
+  const view=render(<PackageDropArea platform="linux"/>);
+  expect(screen.queryByRole('region')).toBeNull();
+  expect(view.container.textContent).toBe('');
+});
 it.each(['zh-Hans','en','ja','ko'] as const)('shows platform-specific copy in %s',language=>{
   setLanguage(language);const view=render(<PackageDropArea platform="mac"/>);
   expect(screen.getByRole('region').textContent).toContain('.dmg');

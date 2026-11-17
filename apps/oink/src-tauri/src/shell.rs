@@ -68,7 +68,10 @@ fn enqueue(app: &AppHandle, request: WindowRequest) {
             };
             #[cfg(windows)]
             let result = execute_request(&handle, request);
-            #[cfg(target_os = "macos")]
+            // AppKit and GTK build their windows on their own main thread; the
+            // reentrant UI thread never waits for the worker or starts
+            // another constructor.
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             let result = {
                 let request_handle = handle.clone();
                 on_ui(&handle, move || execute_request(&request_handle, request))
@@ -172,7 +175,7 @@ pub fn shell_resize_panel(app: AppHandle, window: tauri::WebviewWindow, width: f
         };
         #[cfg(target_os = "macos")]
         crate::panel_macos::resize(&window, rect);
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         if let Some(panel) = app.get_webview_window("panel") {
             let _ = panel.set_size(tauri::PhysicalSize::new(rect.width, rect.height));
             let _ = panel.set_position(tauri::PhysicalPosition::new(rect.x, rect.y));
@@ -216,7 +219,7 @@ fn create_or_close_panel(app: &AppHandle, anchor: PanelAnchor) -> tauri::Result<
         .skip_taskbar(true)
         .visible(false)
         .focused(false);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     let builder = builder.always_on_top(true);
     // Tauri/Wry clears both native and WebView backings. The macOS panel paints
     // while invisible and is destroyed on close, so no hidden view keeps running.
@@ -241,6 +244,12 @@ fn create_or_close_panel(app: &AppHandle, anchor: PanelAnchor) -> tauri::Result<
                 window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y))?;
                 window.set_size(tauri::PhysicalSize::new(rect.width, rect.height))?;
                 show_windows(&window, OpenTrigger::Tray.activation())
+            }
+            #[cfg(target_os = "linux")]
+            {
+                window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y))?;
+                window.set_size(tauri::PhysicalSize::new(rect.width, rect.height))?;
+                show_normal(&handle, &window)
             }
         })
     });
@@ -371,6 +380,10 @@ fn create_normal(app: &AppHandle, view: View) -> tauri::Result<()> {
                 return Err(error);
             }
         };
+        // The desktop theme is a property of the window on Linux: read it off
+        // the UI thread so the status icon matches the desktop.
+        #[cfg(target_os = "linux")]
+        crate::app_icon::window_theme(app, &window);
         #[cfg(windows)]
         if view == View::Main {
             crate::local_drop_windows::attach(&window)?;
@@ -388,7 +401,7 @@ fn create_normal(app: &AppHandle, view: View) -> tauri::Result<()> {
         tracing::info!(view = label, "product window prepared");
         #[cfg(windows)]
         return finish_normal_windows(app, window, created, created && view == View::Main);
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             let reveal = {
                 let shell = app.state::<Shell>();
@@ -518,22 +531,24 @@ fn show_windows(window: &tauri::WebviewWindow, activation: Activation) -> tauri:
 
 #[cfg(windows)]
 fn focus_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
-    #[cfg(windows)]
-    {
-        // Tao's set_focus falls back to injecting Alt down/up when Windows
-        // refuses foreground activation. Input sharing can forward those keys
-        // to another device. Respect the foreground policy without synthesizing
-        // input; a visible window remains available from the taskbar if denied.
-        let hwnd = windows::Win32::Foundation::HWND(window.hwnd()?.0);
-        // SAFETY: this is the live product HWND on its owning UI thread.
-        unsafe {
-            if !windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd).as_bool() {
-                tracing::warn!(view = window.label(), "Windows declined foreground activation");
-            }
+    // Tao's set_focus falls back to injecting Alt down/up when Windows
+    // refuses foreground activation. Input sharing can forward those keys
+    // to another device. Respect the foreground policy without synthesizing
+    // input; a visible window remains available from the taskbar if denied.
+    let hwnd = windows::Win32::Foundation::HWND(window.hwnd()?.0);
+    // SAFETY: this is the live product HWND on its owning UI thread.
+    unsafe {
+        if !windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd).as_bool() {
+            tracing::warn!(view = window.label(), "Windows declined foreground activation");
         }
-        Ok(())
     }
-    #[cfg(not(windows))]
+    Ok(())
+}
+
+/// A Linux desktop decides whether a focus request is granted; the window
+/// manager keeps the request and no input is synthesized.
+#[cfg(target_os = "linux")]
+fn focus_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     window.set_focus()
 }
 

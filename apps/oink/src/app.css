@@ -99,6 +99,9 @@ input::-ms-reveal, input::-ms-clear { display: none; }
   box-shadow: inset 0 0 0 1px var(--ok-line-2), inset 0 1.5px 0 var(--ok-hi);
 }
 .win[data-maximized] { --win-r: 0px; }
+/* Linux keeps the desktop's own frame, so the app fills the client area
+   instead of drawing a rounded card inside a transparent gutter. */
+.win[data-platform="linux"] { --win-r: 0px; }
 .win[data-maximized]::after { box-shadow: none; }
 .win[data-morphing] {
   transition:
@@ -133,6 +136,7 @@ input::-ms-reveal, input::-ms-clear { display: none; }
    independent translate preserves the title status's own transform animation. */
 .win[data-platform="mac"] .win__titlebar > :is(.win__nav-toggle, .win__title-center, .win__title-end) { translate: 0 var(--native-controls-offset, 0px); }
 .win[data-platform="mac"] .win__titlebar { height: 44px; min-height: 44px; box-sizing: border-box; padding: 0 18px; }
+.win[data-platform="linux"] .win__titlebar { height: 44px; min-height: 44px; box-sizing: border-box; padding: 0 18px; }
 .mac-lights { display: flex; gap: 8px; }
 .mac-light {
   --c: #FF5F57; --b: #E2463F; --g: #4C0002;
@@ -271,7 +275,7 @@ input::-ms-reveal, input::-ms-clear { display: none; }
 .win__paused path { fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; }
 
 .win__title-end { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.win[data-platform="mac"] .win__title-end { margin-right: -4px; }
+.win:is([data-platform="mac"], [data-platform="linux"]) .win__title-end { margin-right: -4px; }
 .win[data-platform="win"] .win__title-end { align-self: flex-start; margin-top: 8px; margin-right: -6px; }   
 .win[data-platform="win"] .win__title-end + .win-caps { margin-left: 0; }
 .win__promo { display: flex; align-items: center; gap: 2px; }
@@ -663,8 +667,9 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; }
 .oink-app > .side-ctx { height: 100%; }
 /* About uses the normal system frame; main and panel draw their own shape. */
 .oink-app[data-view="about"] > .win { border-radius: 0; corner-shape: round; --ok-shape: round; border: 0; box-shadow: none; }
-body:has(.oink-app:is([data-view="main"], [data-view="panel"])) { background: transparent; }
+body:has(.oink-app:is([data-view="main"], [data-view="panel"]):not([data-platform="linux"])) { background: transparent; }
 .oink-app[data-view="main"] { --main-gutter: 24px; }
+.oink-app[data-platform="linux"][data-view="main"] { --main-gutter: 0px; }
 .oink-app[data-view="main"] > .side-ctx {
   display: block; position: relative;
 }
@@ -681,6 +686,7 @@ body:has(.oink-app:is([data-view="main"], [data-view="panel"])) { background: tr
 .win-shadow__shape { position: absolute; inset: var(--main-gutter); overflow: hidden; }
 .oink-app[data-view="main"][data-edge-to-edge] { --main-gutter: 0px; }
 .oink-app[data-edge-to-edge] > .win-shadow { display: none; }
+.oink-app[data-platform="linux"] > .win-shadow { display: none; }
 .win-cap[data-snap-hover] { background: var(--ok-hover); }
 .resize-edges { position: absolute; inset: calc(var(--main-gutter) - 4px); pointer-events: none; z-index: 80; }
 .resize-edges > div { position: absolute; pointer-events: auto; }
@@ -713,7 +719,7 @@ body:has(.oink-app:is([data-view="main"], [data-view="panel"])) { background: tr
 .win__body { isolation: isolate; }
 .win[data-covered] .win__titlebar > :not(.mac-lights, .win-caps, .win__cover-bar) { visibility: hidden; }
 .win__cover-bar { position: absolute; top: 50%; translate: 0 -50%; z-index: 1; display: flex; align-items: center; }
-.win[data-platform="mac"] .win__cover-bar { right: 12px; }
+.win:is([data-platform="mac"], [data-platform="linux"]) .win__cover-bar { right: 12px; }
 .win[data-platform="win"] .win__cover-bar { right: 150px; }
 .win__promo .ok-btn.win__promo-sponsor { padding-inline: 8px 10px; }
 

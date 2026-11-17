@@ -1032,11 +1032,7 @@ async fn clipboard_file_operation_interruption_retains_binding_and_reopens_at_re
             clip: ClipId { origin: f.peer, seq: 1 },
             generation: 1,
         },
-        platform: if cfg!(target_os = "macos") {
-            ClipPlatform::Mac
-        } else {
-            ClipPlatform::Windows
-        },
+        platform: ClipPlatform::local(),
         items: vec![],
         roots: vec![FileNode {
             exec_bits: None,
@@ -1164,11 +1160,7 @@ fn large_clipboard_offer(origin: DeviceId, sequence: u64) -> dto::ClipboardOffer
             clip: ClipId { origin, seq: sequence },
             generation: sequence,
         },
-        platform: if cfg!(target_os = "macos") {
-            ClipPlatform::Mac
-        } else {
-            ClipPlatform::Windows
-        },
+        platform: ClipPlatform::local(),
         roots: vec![],
         items: (0..600)
             .map(|n| ContentItem {
@@ -1177,11 +1169,7 @@ fn large_clipboard_offer(origin: DeviceId, sequence: u64) -> dto::ClipboardOffer
                 file: None,
                 representations: vec![Representation {
                     id: RepresentationId(n + 1),
-                    format: if cfg!(target_os = "macos") {
-                        NativeFormat::Mac(format!("org.oink.test.item-{n}"))
-                    } else {
-                        NativeFormat::WindowsRegistered(format!("Oink Test Item {n}"))
-                    },
+                    format: NativeFormat::local(format!("org.oink.test.item-{n}")),
                     medium: Medium::Bytes,
                     aspect: 1,
                     index: -1,

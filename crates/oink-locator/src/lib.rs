@@ -583,8 +583,16 @@ fn over_pixel(dst: u32, src: u32) -> u32 {
 }
 
 /// 每帧最长间隔：平台不知道刷新率时按 60 Hz。
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 pub(crate) const DEFAULT_FRAME: Duration = Duration::from_micros(16_667);
 
+/// Platforms without a native overlay keep the effect model but draw nothing.
+///
+/// The trail needs a transparent, click-through, always-on-top surface.
+/// Neither X11 nor Wayland offers one without a compositor-specific
+/// extension, so the overlay reports itself as unavailable and the product
+/// keeps the feature switched off instead of drawing a surface that would
+/// swallow input.
 #[cfg(not(any(target_os = "macos", windows)))]
 mod platform {
     use super::*;
@@ -593,6 +601,7 @@ mod platform {
         false
     }
 
+    #[allow(dead_code)]
     pub(crate) struct Layer {
         pub surface: usize,
         pub rect: CellRect,
@@ -602,7 +611,7 @@ mod platform {
     pub(crate) struct Backend;
 
     impl Backend {
-        pub(crate) fn new() -> Option<Self> {
+        pub(crate) fn new(_health: std::sync::Arc<crate::diagnostics::Health>) -> Option<Self> {
             None
         }
         pub(crate) fn set_displays(&mut self, _: &[DisplayInfo]) {}

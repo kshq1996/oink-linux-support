@@ -9,7 +9,7 @@ import type { AutoUnlockFailure } from '../api/client';
 export function SettingsPreview() {
   const q = new URLSearchParams(location.search);
   setLanguage(q.get('lang') ?? 'zh-Hans');
-  const platform = q.get('platform') === 'win' ? 'win' : 'mac';
+  const platform = q.get('platform') === 'win' ? 'win' : q.get('platform') === 'linux' ? 'linux' : 'mac';
   const theme = q.get('theme') === 'dark' ? 'dark' : 'light';
   const failureParam = q.get('failure');
   const failure = (failureParam === 'password_incorrect' || failureParam === 'windows_hello_only' || failureParam === 'login_ui_not_ready' || failureParam === 'unknown')

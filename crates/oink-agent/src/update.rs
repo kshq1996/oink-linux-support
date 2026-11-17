@@ -109,7 +109,10 @@ impl Controller {
     }
     /// Starts a check unless one is running or a download owns the candidate;
     /// returns the generation the result must still match.
+    // Only the macOS release feed is checked online; Linux updates through
+    // the distribution package manager.
     #[cfg(not(windows))]
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     fn begin_check(&mut self) -> Result<Option<u64>, Error> {
         if self.status.error == Some(Error::NotConfigured) {
             return Err(Error::NotConfigured);
@@ -233,6 +236,11 @@ impl Node {
             match command {
                 Command::OpenLocal { .. } => unreachable!("handled before platform dispatch"),
                 Command::Check => {
+                    // The signed catalog is the macOS release feed; Linux
+                    // packages are updated by the distribution package manager.
+                    #[cfg(not(target_os = "macos"))]
+                    return Err(api_error(Error::OsUnsupported));
+                    #[cfg(target_os = "macos")]
                     if let Some(generation) = state.begin_check().map_err(api_error)? {
                         online::spawn_check(self, generation, oink_update::catalog::Check::Manual);
                     }
@@ -265,6 +273,7 @@ impl Node {
                     // only offers builds above the installed one, never a downgrade.
                     if previous.preferences.channel() != preferences.channel() {
                         state.supersede();
+                        #[cfg(target_os = "macos")]
                         if let Ok(Some(generation)) = state.begin_check() {
                             online::spawn_check(self, generation, oink_update::catalog::Check::Automatic);
                         }
@@ -465,7 +474,9 @@ pub(crate) fn attach(node: &Node) {
     online::attach(node);
 }
 
-#[cfg(not(windows))]
+// Only the macOS installer reports a failed local upgrade; the Windows
+// installer runs in the elevated service and Linux has no local install.
+#[cfg(target_os = "macos")]
 fn install_failure(node: &Node, error: Error, blockers: Vec<Blocker>) {
     tracing::info!(step="install_failed", error=?error, ?blockers, "upgrade aborted before backend exit");
     let mut state = lock(&node.inner.update);
@@ -518,7 +529,8 @@ pub(crate) fn request_quit() {
         QUITTING.store(false, Ordering::Release);
     });
 }
-#[cfg(not(windows))]
+// Reopening the product after an update is a macOS bundle launch.
+#[cfg(target_os = "macos")]
 pub(crate) fn prepare_reopen(node: &Node) -> ApiResult<Prepared> {
     node.prepare_for_update().map_err(|_| api_error(Error::Busy))
 }

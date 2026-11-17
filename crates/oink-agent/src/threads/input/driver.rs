@@ -195,13 +195,7 @@ impl Driver {
         let layout = snapshots.layout.load();
         let settings = snapshots.settings.load();
         let environment = snapshots.environment.load();
-        let os = if cfg!(target_os = "macos") {
-            Os::MacOS
-        } else if cfg!(windows) {
-            Os::Windows
-        } else {
-            Os::Other
-        };
+        let os = Os::current();
         let mut config = RouterConfig::new(boot, "", os);
         config.capture_reports_key_repeat = snapshots.capture_reports_key_repeat;
         let online = BTreeSet::from([local]);

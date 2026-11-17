@@ -28,7 +28,7 @@ function cards(paused: boolean, reason: LocalPauseCard['reason']): DeviceCardsVi
   };
 }
 
-for (const platform of ['macos', 'windows'] as const) {
+for (const platform of ['macos', 'windows', 'linux'] as const) {
   for (const [language, label] of [['zh-Hans', '共享已暂停'], ['en', 'Sharing paused']] as const) {
     describe(`${platform} paused title in ${language}`, () => {
       it.each(['local_user', 'remote_user', 'emergency', 'input_backlog'] as const)('shows a decorative pause glyph for %s, and hides the status on resume', reason => {
@@ -38,7 +38,7 @@ for (const platform of ['macos', 'windows'] as const) {
         const { container } = render(<App/>);
         const status = screen.getByRole('status');
         expect(status.textContent).toBe(label);
-        expect(status.closest('.win')?.getAttribute('data-platform')).toBe(platform === 'macos' ? 'mac' : 'win');
+        expect(status.closest('.win')?.getAttribute('data-platform')).toBe(platform === 'macos' ? 'mac' : platform === 'windows' ? 'win' : 'linux');
         const icon = status.querySelector('svg')!;
         expect(icon.getAttribute('aria-hidden')).toBe('true');
         expect(icon.getAttribute('focusable')).toBe('false');

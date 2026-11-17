@@ -36,6 +36,8 @@ pub fn formats() -> dto::FormatSupport {
         vec!["mac-uti"]
     } else if cfg!(windows) {
         vec!["win-name", "win-cf"]
+    } else if cfg!(target_os = "linux") {
+        vec!["linux"]
     } else {
         vec![]
     };
@@ -61,6 +63,7 @@ pub fn native_format(format: &oink_foundation::content::NativeFormat) -> String 
         NativeFormat::Mac(name) => format!("mac-uti:{name}"),
         NativeFormat::WindowsRegistered(name) => format!("win-name:{name}"),
         NativeFormat::WindowsPredefined(id) => format!("win-cf:{id}"),
+        NativeFormat::Linux(name) => format!("linux:{name}"),
         NativeFormat::Unknown(name) => name.clone(),
     }
 }

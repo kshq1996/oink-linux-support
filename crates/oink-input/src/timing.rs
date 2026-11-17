@@ -1,5 +1,7 @@
 //! Source-owned input measurements. Native owners only update fixed atomics;
 //! the ordinary statistics clock drains maxima once per sample, never per event.
+// The macOS and Windows backends own the capture timer; the Linux backend has none.
+#![cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
 use serde::{Deserialize, Serialize};
 use std::sync::{
     Arc,

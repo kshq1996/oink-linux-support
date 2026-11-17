@@ -30,6 +30,16 @@ png = "0.18"
 # Native content transfers run on ordinary background tasks.
 tokio.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# X11 selections (CLIPBOARD) for Linux sessions.
+arboard = "3.6"
+# PNG ↔ RGBA8 conversion for clipboard images (src/linux).
+image = { version = "0.25", default-features = false, features = ["png"] }
+# The KDE privacy hint of the current selection (src/linux/privacy.rs).
+x11rb.workspace = true
+# Unicode canonical composition for received source names (src/received.rs).
+unicode-normalization = "0.1"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
 block2 = "0.6"

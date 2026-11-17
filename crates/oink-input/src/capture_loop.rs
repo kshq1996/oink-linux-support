@@ -1,5 +1,8 @@
 //! The router's owner is transferred to the native capture thread. Both native input
 //! callbacks and queue/timer wakeups enter it on that one thread; there is no shared lock.
+// The router only drives these helpers on macOS and Windows so far; the Linux
+// backend reaches the owner through `event`, `install`, `poll` and `clear`.
+#![cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
 use crate::{CapturedEvent, Disposition};
 use std::{cell::RefCell, sync::Arc, time::Instant};
 

@@ -36,12 +36,13 @@ pub const UNIVERSAL_CLIPBOARD: &str = "com.apple.is-remote-clipboard";
 /// nspasteboard.org source-application annotation: metadata, not content.
 const SOURCE_ANNOTATION: &str = "org.nspasteboard.source";
 /// Oink clip marker (encoding in `oink_foundation::clipboard_marker`).
-pub use oink_foundation::clipboard_marker::{MARKER_APPLE as MARKER_MAC, MARKER_BYTES, MARKER_WINDOWS};
+pub use oink_foundation::clipboard_marker::{MARKER_APPLE as MARKER_MAC, MARKER_BYTES, MARKER_LINUX, MARKER_WINDOWS};
 
 pub fn is_marker(format: &NativeFormat) -> bool {
     match format {
         NativeFormat::Mac(name) => name == MARKER_MAC,
         NativeFormat::WindowsRegistered(name) => name.eq_ignore_ascii_case(MARKER_WINDOWS),
+        NativeFormat::Linux(name) => name == MARKER_LINUX,
         _ => false,
     }
 }
@@ -135,6 +136,7 @@ fn format_name(format: &NativeFormat) -> String {
         NativeFormat::Mac(name) => format!("mac:{name}"),
         NativeFormat::WindowsRegistered(name) => format!("win:{}", name.to_ascii_lowercase()),
         NativeFormat::WindowsPredefined(cf) => format!("win-cf:{cf}"),
+        NativeFormat::Linux(name) => format!("linux:{name}"),
         NativeFormat::Unknown(name) => format!("unknown:{name}"),
     }
 }

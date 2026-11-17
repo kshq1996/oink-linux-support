@@ -16,6 +16,10 @@ mod windows;
 use macos as platform;
 #[cfg(windows)]
 use windows as platform;
+#[cfg(not(any(target_os = "macos", windows)))]
+mod linux;
+#[cfg(not(any(target_os = "macos", windows)))]
+use linux as platform;
 
 #[cfg(target_os = "macos")]
 pub fn scale_for(_display: &DisplayInfo) -> f64 {
@@ -24,6 +28,10 @@ pub fn scale_for(_display: &DisplayInfo) -> f64 {
 #[cfg(windows)]
 pub fn scale_for(display: &DisplayInfo) -> f64 {
     platform::scale_for(display)
+}
+#[cfg(not(any(target_os = "macos", windows)))]
+pub fn scale_for(_display: &DisplayInfo) -> f64 {
+    1.0
 }
 
 pub const LIFETIME: Duration = Duration::from_secs(6);

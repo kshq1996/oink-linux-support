@@ -70,7 +70,7 @@ pub(crate) fn refresh(app: &AppHandle) {
             {
                 #[cfg(target_os = "macos")]
                 let result = crate::window_paint_macos::visibility(app, &window, visible);
-                #[cfg(windows)]
+                #[cfg(any(windows, target_os = "linux"))]
                 let result = {
                     let webview: &tauri::Webview = window.as_ref();
                     if visible { webview.show() } else { webview.hide() }

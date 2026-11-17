@@ -550,11 +550,7 @@ async fn pair_route_clipboard_layout_disconnect_scenario() {
         bc.items() == vec![ClipData::Text(text.clone())]
     })
     .await;
-    let platform = if cfg!(target_os = "macos") {
-        oink_foundation::clipboard::ClipPlatform::Mac
-    } else {
-        oink_foundation::clipboard::ClipPlatform::Windows
-    };
+    let platform = oink_foundation::clipboard::ClipPlatform::local();
     // A few large format identities cross the same manifest boundary without
     // turning this routing scenario into hundreds of sequential payload reads.
     let many: Vec<_> = (0..8)

@@ -147,11 +147,7 @@ pub(super) fn native_inventory(id: OfferId, items: &[ClipData], retained: Option
         .map_err(|_| invalid())?
         .unwrap_or_else(|| Inventory {
             id,
-            platform: if cfg!(target_os = "macos") {
-                ClipPlatform::Mac
-            } else {
-                ClipPlatform::Windows
-            },
+            platform: ClipPlatform::local(),
             items: vec![],
             roots: items
                 .iter()

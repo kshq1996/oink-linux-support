@@ -391,11 +391,7 @@ impl DndGlue {
                         return Err(reason(&error));
                     }
                 };
-                let target = if cfg!(target_os = "macos") {
-                    oink_foundation::clipboard::ClipPlatform::Mac
-                } else {
-                    oink_foundation::clipboard::ClipPlatform::Windows
-                };
+                let target = oink_foundation::clipboard::ClipPlatform::local();
                 let remote = match oink_clipboard::content::Remote::on_wire_runtime(
                     &self.data_dir,
                     batch,

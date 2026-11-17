@@ -9,18 +9,27 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語** | [한국어](README.ko.md)
 
-Oink は「Oink Is Not only a KVM」の略で、複数の Windows と Mac のあいだにピアツーピアの共有ネットワークを構築するモダンなソフトウェアです。どのデバイスのキーボード・マウス・トラックパッドでも近くの任意のデバイスを操作でき、どこでも統一されたネイティブな操作感を保ちます。複数のデバイスの音声を 1 台のデバイスにつないだスピーカーやヘッドホンで再生でき、クリップボードの共有とデバイス間のドラッグ＆ドロップ、ローカルネットワーク上のデバイスの自動検出に対応し、通信はデフォルトで暗号化されます。
+Oink は「Oink Is Not only a KVM」の略で、複数の Windows と Mac と Linux のあいだにピアツーピアの共有ネットワークを構築するモダンなソフトウェアです。どのデバイスのキーボード・マウス・トラックパッドでも近くの任意のデバイスを操作でき、どこでも統一されたネイティブな操作感を保ちます。複数のデバイスの音声を 1 台のデバイスにつないだスピーカーやヘッドホンで再生でき、クリップボードの共有とデバイス間のドラッグ＆ドロップ、ローカルネットワーク上のデバイスの自動検出に対応し、通信はデフォルトで暗号化されます。
 
 ## インストール
 
-インストーラーと対応するソースコードは [GitHub Releases](https://github.com/oinkvm/oink/releases) から入手できます。
+インストーラーと対応するソースコードは [GitHub Releases](https://github.com/kshq1996/oink-linux-support/releases) から入手できます。
 
 対応 OS とバージョン：
 
 - **Mac**：Apple シリコン（arm64）、macOS 14.2 以降。Intel（x64）、macOS 14.2 以降（未テスト）
 - **Windows**：x64、Windows 10 1809（ビルド 17763）以降、または Windows 11。22H2 より前の Windows 10 バージョンは未テストです。Windows 10 LTSC（LTSC 2019 / LTSC 2021 など）には WebView2 Runtime が付属しないため、先に Microsoft Edge WebView2 Runtime（Evergreen）をインストールしてください：https://developer.microsoft.com/microsoft-edge/webview2/
+- **Linux**：x64 と arm64、X11（または XWayland）のあるデスクトップセッションが必要です。Debian、Ubuntu、Linux Mint では `.deb`、Fedora、openSUSE、RHEL では `.rpm` パッケージをインストールします。
 
 SmartScreen に「Windows によって PC が保護されました」と表示された場合は、選択肢が表示されたときに限り **詳細情報 → 実行** を選んでください。UAC では発行元が不明と表示されることがあります。
+
+### Linux
+
+Linux パッケージは 3 つのプログラムを導入します。トレイアプリケーションの `oink`、コマンドラインツールの `oink-agent`、バックグラウンドプロセスの `oink-backend` です。パッケージは実行時依存（WebKitGTK 4.1、GTK 3、libayatana-appindicator3）を宣言しているため、不足分はそのディストリビューションのパッケージマネージャーが導入します。
+
+Linux のバックエンドは X11 を使います。入力の取得と注入は XRecord と XTest、クリップボードは X11 の選択プロトコル、ディスプレイ配置は XRandR です。Wayland セッションでは XWayland 経由で動作します。macOS と Windows が描くカーソルトレイルのオーバーレイは Linux では利用できません。
+
+システムオーディオは Linux ではまだ利用できません。他のデバイスの音声をこのデバイスで再生したりマイクを共有したりするにはネイティブのオーディオバックエンドが必要ですが、Linux にはまだありません。キーボード、マウス、トラックパッド、クリップボード、ディスプレイ配置、デバイス探索など、ほかの機能はすべて動作します。
 
 ### スポンサー
 

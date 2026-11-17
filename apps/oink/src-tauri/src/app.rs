@@ -2,7 +2,7 @@
 use std::sync::{Arc, Mutex};
 
 use oink_agent::api::{self, AgentApi, ApiError, ApiEvent, Reply, Request};
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, State};
 
@@ -295,7 +295,9 @@ pub fn run() {
                 return;
             }
         }
-        #[cfg(not(windows))]
+        // macOS starts its backend from the application bundle, so the UI only
+        // checks that it is there. Linux starts the backend itself below.
+        #[cfg(target_os = "macos")]
         {
             if let Err(error) = crate::service::check_backend_ownership(&data_dir) {
                 tracing::error!(%error, "backend process ownership unavailable");
@@ -325,7 +327,7 @@ pub fn run() {
             boot,
             update_window: Arc::new(crate::update_window::Owner::default()),
             update_follow: crate::update_window::Follow::default(),
-            startup: crate::service::Startup::new(cfg!(windows)),
+            startup: crate::service::Startup::new(cfg!(windows) || cfg!(target_os = "linux")),
             remote: remote_api,
             capture: Mutex::new(Some(oink_agent::telemetry::UiCapture::new(
                 oink_foundation::paths::data_dir(),
@@ -416,6 +418,12 @@ pub fn run() {
                 crate::foreground_windows::install(&handle);
                 setup_tray(&handle)?;
             }
+            #[cfg(target_os = "linux")]
+            if let Err(error) = setup_tray(&handle) {
+                // A desktop without a status area is normal: the product
+                // window and the backend keep working without a tray icon.
+                tracing::warn!(%error, "tray icon unavailable");
+            }
             forward_events(&handle);
             crate::native_controls::initialize(&handle);
             #[cfg(windows)]
@@ -430,6 +438,27 @@ pub fn run() {
                         let result = std::env::current_exe().map_err(|e| e.to_string())
                             .and_then(|exe| crate::service::start_once(&remote, &exe));
                         match result {
+                            Ok(()) => {
+                                connected.state::<Backend>().startup.finish(Ok(()));
+                                crate::native_controls::initialize(&connected);
+                            }
+                            Err(error) => {
+                                tracing::error!(%error, "backend startup failed");
+                                connected.state::<Backend>().startup.finish(Err(error));
+                                if remote.build_mismatch() {
+                                    connected.exit(0);
+                                    return;
+                                }
+                                show_main(&connected);
+                                return;
+                            }
+                        }
+                    }
+                    // Linux ships the backend next to this executable and
+                    // starts it here; the endpoint follows.
+                    #[cfg(target_os = "linux")]
+                    {
+                        match crate::service::start_backend(&remote) {
                             Ok(()) => {
                                 connected.state::<Backend>().startup.finish(Ok(()));
                                 crate::native_controls::initialize(&connected);
@@ -623,7 +652,7 @@ fn show_main_on_main(app: &AppHandle) {
     crate::shell::open_normal(app, crate::shell_policy::View::Main);
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let icon = crate::app_icon::tray_image(app).map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
     TrayIconBuilder::with_id("main")
@@ -631,6 +660,9 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .tooltip("Oink")
         .show_menu_on_left_click(false)
         .build(app)?;
+    // The shell notification area belongs to the Windows shell; a Linux
+    // status area needs no native owner.
+    #[cfg(windows)]
     crate::tray_windows::install(app)?;
     crate::app_icon::tray_created(app);
     Ok(())
@@ -678,7 +710,7 @@ fn forward_events(app: &AppHandle) {
     let data_dir = oink_foundation::paths::data_dir();
     api.subscribe(Arc::new(move |ev: &ApiEvent| {
         if let ApiEvent::DeviceCards(view) = ev {
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             crate::app_icon::device_cards(&handle, view);
             crate::native_controls::cards(&handle, view);
         }

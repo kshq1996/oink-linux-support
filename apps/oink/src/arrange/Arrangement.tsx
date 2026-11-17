@@ -22,6 +22,7 @@ import { cameraStore } from './cameraStore';
 import { growArrangementView, SpringCamera, visibleArrangement } from './camera';
 import { SnapFeedback } from './haptics';
 import { compactScreens } from './compaction';
+import type { Platform } from '../window/DesktopWindow';
 import { projectScreenRect } from './renderGeometry';
 export interface ArrangementSettings {
     showHotZones: boolean;
@@ -44,7 +45,7 @@ export type ScreenMove =
     | { type: 'end'; id: string; cancelled: false; label: string; compact: boolean };
 export interface ArrangementProps {
     screens: Screen[];
-    platform?: 'mac' | 'win';
+    platform?: Platform;
     /** Complete retained geometry, including hidden members used at release. */
     geometryScreens?: Screen[];
     onProjection?: (screens: Screen[] | null, held?: boolean) => void;
@@ -619,10 +620,11 @@ export function Arrangement({ screens, platform = 'mac', geometryScreens = scree
     // local pixel phases: fractional canvas origins leave AA seams despite exact
     // global edges. Removing clips or using native round corners does not help.
     // Chromium needs translates at fractional DPR to avoid CSS layout's 1/64 px
-    // quantization. Only macOS uses layout positioning; world/camera/hit-test
-    // arithmetic and Windows painting remain unchanged.
-    const paintPosition = (r: Rect): CSSProperties => platform === 'mac'
-        ? { left: r.x, top: r.y } : { transform: `translate(${r.x}px, ${r.y}px)` };
+    // quantization. WebKit hosts (macOS and Linux's WebKitGTK) use layout
+    // positioning; world/camera/hit-test arithmetic and Windows painting
+    // remain unchanged.
+    const paintPosition = (r: Rect): CSSProperties => platform === 'win'
+        ? { transform: `translate(${r.x}px, ${r.y}px)` } : { left: r.x, top: r.y };
     // Use only existing top-left whitespace. Include selection arcs/handles in
     // the exclusion margin, and keep the toolbar's top-right footprint clear.
     // Recalculate from painted springs so zoom and animation cannot cover hints.

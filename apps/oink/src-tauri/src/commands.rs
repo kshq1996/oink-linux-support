@@ -14,7 +14,7 @@ pub enum ShellError {
     LogLevelUnavailable,
     #[cfg(target_os = "macos")]
     StatusIconOwnedByBackend,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     StatusIconUnavailable,
 }
 
@@ -45,6 +45,9 @@ pub async fn read_attribution(app: AppHandle, path: String) -> Result<String, Sh
         .path()
         .resource_dir()
         .map_err(|_| ShellError::AttributionUnavailable)?;
+    // The Linux package installs the notices with the documentation.
+    #[cfg(target_os = "linux")]
+    let root = std::path::PathBuf::from("/usr/share/doc/oink");
     let _ = app;
     let file = root.join(path);
     // Packaged assets are read-only. Canonical containment also rejects symlink
@@ -87,6 +90,19 @@ fn open_external(target: &std::ffi::OsStr) -> Result<(), ()> {
             )
         };
         if result.0 as usize <= 32 {
+            return Err(());
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // The freedesktop helper opens a URL or a folder in the user's own
+        // session; it never runs a command interpreter.
+        let status = std::process::Command::new("xdg-open")
+            .arg("--")
+            .arg(target)
+            .status()
+            .map_err(|_| ())?;
+        if !status.success() {
             return Err(());
         }
     }
@@ -134,7 +150,7 @@ pub fn shell_set_log_level(level: String) -> Result<(), ShellError> {
 /// backend immediately after its authoritative native preference is committed.
 #[tauri::command]
 pub fn shell_set_status_icon(app: AppHandle, visible: bool) -> Result<(), ShellError> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     {
         let tray = app.tray_by_id("main").ok_or(ShellError::StatusIconUnavailable)?;
         tray.set_visible(visible).map_err(|_| ShellError::StatusIconUnavailable)
@@ -263,6 +279,6 @@ pub fn shell_alignment_haptic(app: AppHandle) {
             tracing::debug!(%error, "alignment haptic unavailable");
         }
     }
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     let _ = app;
 }

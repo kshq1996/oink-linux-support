@@ -56,9 +56,8 @@ async fn input_ready(node: &Node, input: &FakeInput) {
     .expect("capture and injection sessions ready");
 }
 async fn pause(node: &Node, id: u64, paused: bool) {
-    let reply = node
-        .set_local_paused(format!("00000000-0000-4000-8000-{id:012x}"), paused)
-        .unwrap();
+    let request_id = format!("00000000-0000-4000-8000-{id:012x}");
+    let reply = node.set_local_paused(request_id.clone(), paused).unwrap();
     assert!(
         !matches!(
             reply,
@@ -71,6 +70,26 @@ async fn pause(node: &Node, id: u64, paused: bool) {
         "{reply:?}"
     );
     settled(node, paused).await;
+    // The control runs on a worker, so the first reply only says the request
+    // was accepted. Wait for the completion: a later replay of the same id
+    // has to meet a finished request, not one that is still in flight.
+    completed(node, &request_id, paused).await;
+}
+/// Wait until the control request behind `request_id` has completed.
+async fn completed(node: &Node, request_id: &str, paused: bool) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match node.set_local_paused(request_id.to_string(), paused).unwrap() {
+                oink_agent::device_cards::DeviceControlReply::Completed(_) => return,
+                oink_agent::device_cards::DeviceControlReply::Accepted(_) => {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                other => panic!("unexpected pause reply: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("the pause request completed");
 }
 #[test]
 fn local_pause_detaches_input_resumes_fresh_and_resets_on_restart() {
@@ -188,10 +207,10 @@ fn completed_pause_request_replay_does_not_override_a_later_resume() {
             let reply = node
                 .set_local_paused("00000000-0000-4000-8000-000000000001".into(), true)
                 .unwrap();
-            assert!(matches!(
-                reply,
-                oink_agent::device_cards::DeviceControlReply::Completed(_)
-            ));
+            assert!(
+                matches!(reply, oink_agent::device_cards::DeviceControlReply::Completed(_)),
+                "{reply:?}"
+            );
             settled(&node, false).await;
             assert!(!node.pause_status().paused);
             node.shutdown().await;

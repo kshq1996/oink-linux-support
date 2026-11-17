@@ -1,49 +1,14 @@
 //! Local shell integration; clipboard selection/conversion lives in oink-clipboard.
 use crate::config::{Settings, UiLanguage};
+#[cfg(any(target_os = "macos", windows))]
+use std::process::Command;
 use std::{
     io,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 pub fn language(value: UiLanguage) -> &'static str {
-    #[cfg(target_os = "macos")]
-    let system = objc2_foundation::NSLocale::preferredLanguages()
-        .firstObject()
-        .map(|s| s.to_string())
-        .unwrap_or_default();
-    #[cfg(windows)]
-    fn preferred_language() -> String {
-        use windows::{
-            Win32::Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME},
-            core::PWSTR,
-        };
-        let (mut count, mut length) = (0, 0);
-        // SAFETY: sizing query writes only count/length and does not access a buffer.
-        unsafe {
-            if GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, None, &mut length).is_err() {
-                return String::new();
-            }
-        }
-        let mut buffer = vec![0u16; length as usize];
-        // SAFETY: UTF-16 output buffer has the capacity reported by the sizing call.
-        unsafe {
-            if GetUserPreferredUILanguages(
-                MUI_LANGUAGE_NAME,
-                &mut count,
-                Some(PWSTR(buffer.as_mut_ptr())),
-                &mut length,
-            )
-            .is_err()
-            {
-                return String::new();
-            }
-        }
-        String::from_utf16_lossy(buffer.split(|ch| *ch == 0).next().unwrap_or(&[]))
-    }
-    #[cfg(windows)]
-    let system = preferred_language();
-    match value.resolve(&system) {
+    match value.resolve(&crate::locale::system_language()) {
         UiLanguage::SimplifiedChinese => "zh-Hans",
         UiLanguage::Japanese => "ja",
         UiLanguage::Korean => "ko",
@@ -58,6 +23,7 @@ pub fn title(language: &str) -> &'static str {
         _ => "Paste as File",
     }
 }
+#[cfg(any(target_os = "macos", windows))]
 fn checked(command: &mut Command) -> io::Result<std::process::Output> {
     #[cfg(windows)]
     {
@@ -74,6 +40,11 @@ fn checked(command: &mut Command) -> io::Result<std::process::Output> {
 /// Only a packaged backend registers shell hooks. Developer/isolated CLI runs
 /// may invoke save directly and never replace the installed app's registration.
 pub(crate) fn apply(settings: &Settings) -> io::Result<()> {
+    // Linux has no shell hook to register; the paste-as-file verb belongs to
+    // the file provider application.
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let _ = settings;
+    #[cfg(any(target_os = "macos", windows))]
     let exe = std::env::current_exe()?;
     #[cfg(target_os = "macos")]
     {

@@ -27,6 +27,9 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Threading", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_WindowsProgramming"] }
+[target.'cfg(target_os = "linux")'.dependencies]
+# The native thread id in the drag diagnostics (src/drag_trace.rs).
+libc = "0.2"
 
 [[test]]
 name = "process_priority"

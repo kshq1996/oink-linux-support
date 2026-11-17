@@ -6,7 +6,11 @@ import { Button, Icon, Tooltip, mergeRefs, presets, speed } from 'oink-ui';
 import { useTrafficLightAlignment } from './useTrafficLightAlignment';
 import { OverlayScrollbar } from './OverlayScrollbar';
 import { quietActivationFocus } from './activationFocus';
-export type Platform = 'mac' | 'win';
+export type Platform = 'mac' | 'win' | 'linux';
+/** The backend reports the host OS; the shell draws that platform's chrome. */
+export function platformOf(host: 'macos' | 'windows' | 'linux' | undefined): Platform {
+    return host === 'windows' ? 'win' : host === 'linux' ? 'linux' : 'mac';
+}
 export interface WindowState {
     maximized: boolean;
     minimized: boolean;
@@ -109,7 +113,7 @@ export const DesktopWindow = forwardRef<HTMLDivElement, DesktopWindowProps>(func
       {lastCenter.current}
     </div>);
     const navToggle = (<Button variant="ghost" size="sm" iconOnly className="win__nav-toggle" aria-label={navOpen ? tr('收起导航栏') : tr('展开导航栏')} aria-expanded={navOpen} aria-controls="win-nav" onClick={onToggleNav}>
-      <Icon name={platform === 'mac' ? 'sidebar' : 'menu'}/>
+      <Icon name={platform === 'win' ? 'menu' : 'sidebar'}/>
     </Button>);
     const backBar = (b: NonNullable<DesktopWindowProps['navBack']>) => (<span className="win__nav-back" key="back">
       <Tooltip interactive={false} content={b.label} placement="bottom">
@@ -127,7 +131,9 @@ export const DesktopWindow = forwardRef<HTMLDivElement, DesktopWindowProps>(func
     return (<div ref={mergeRefs(ref,node)} className="win" data-covered={covered ? '' : undefined} data-platform={platform} data-active={active?'':undefined} data-maximized={state.maximized?'':undefined} style={style} role="dialog" aria-label={title} onPointerDownCapture={onActivate} onFocusCapture={onActivate}>
       {platform === 'mac'
             ? <MacTitlebar state={state} onMinimize={onMinimize} onToggleMaximize={onToggleMaximize} onClose={onClose} extra={navToggle} center={center} end={titleEnd} coverBar={coverBar}/>
-            : <WinTitlebar state={state} onMinimize={onMinimize} onToggleMaximize={onToggleMaximize} onClose={onClose} extra={navBack ? backBar(navBack) : <>{navToggle}<Lockup /></>} center={center} end={titleEnd} coverBar={coverBar}/>}
+            : platform === 'win'
+                ? <WinTitlebar state={state} onMinimize={onMinimize} onToggleMaximize={onToggleMaximize} onClose={onClose} extra={navBack ? backBar(navBack) : <>{navToggle}<Lockup /></>} center={center} end={titleEnd} coverBar={coverBar}/>
+                : <LinuxTitlebar onToggleMaximize={onToggleMaximize} extra={navToggle} center={center} end={titleEnd} coverBar={coverBar}/>}
       <div className="win__body" inert={covered}>
         
         <aside id="win-nav" className="win__side" onClick={e => { if (!(e.target as Element).closest('button, a, input, label, [role="slider"], [role="radio"], [data-ctx]')) onSideBlank?.(); }} data-open={navOpen ? '' : undefined} data-expanding={expanding ? '' : undefined} onTransitionEnd={(e) => { navState.onTransitionEnd(e); if (navOpen && e.propertyName === 'width' && e.target === e.currentTarget)
@@ -244,6 +250,17 @@ function WinTitlebar({ state, onMinimize, onToggleMaximize, onClose, extra, cent
           <svg viewBox="0 0 10 10" aria-hidden><path d="M.5.5l9 9M9.5.5l-9 9"/></svg>
         </button>
       </div>
+    </div>);
+}
+/** Linux keeps the native window frame, so this row carries no window
+    buttons: the desktop's own title bar owns minimise, maximise and close. */
+function LinuxTitlebar({ onToggleMaximize, extra, center, end, coverBar }: Omit<BarProps, 'state' | 'onMinimize' | 'onClose'>) {
+    return (<div className="win__titlebar" data-tauri-drag-region onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest('button'))
+        onToggleMaximize(); }}>
+      {extra}
+      {center}
+      {end != null && <div className="win__title-end">{end}</div>}
+      {coverBar && <div className="win__cover-bar">{coverBar}</div>}
     </div>);
 }
 export function AppIcon({ platform, size }: {

@@ -31,7 +31,7 @@ import { CompactIcon } from './arrange/CompactIcon';
 import { nextSelection, type SelectMode } from './arrange/selection';
 import { ScreenPreview } from './arrange/screenPreview';
 import { CreateProfileDialog, ProfileList, ProfileTools } from './arrange/LayoutProfiles';
-import { DesktopWindow } from './window/DesktopWindow';
+import { DesktopWindow, platformOf } from './window/DesktopWindow';
 import { ResizeEdges } from './window/ResizeEdges';
 import { FileProviderDialog, useFileProviderExplainer } from './permissions/FileProviderDialog';
 import { QuitDialog } from './window/QuitDialog';
@@ -78,7 +78,7 @@ export function App() {
     const prefs = usePreferences();
     const view = new URLSearchParams(location.search).get('view') ?? 'main';
     const pairing = usePairing(view === 'main');
-    const platform = state.boot?.platform === 'windows' ? 'win' : 'mac';
+    const platform = platformOf(state.boot?.platform);
     const [controlTargets,setControlTargets]=useState<ReadonlyMap<string,ControlAction[]>>(()=>new Map());
     const [controls]=useState(()=>new ControlActions({
         read:(device,action)=>controlObservation(agent.get().cards,device,action),
@@ -218,9 +218,10 @@ export function App() {
         let stopped=false;const stops:Array<()=>void>=[];
         void import('@tauri-apps/api/window').then(async ({getCurrentWindow})=>{
             const window=getCurrentWindow();
-            // macOS zoom keeps a floating shell; fullscreen and Windows
-            // maximization fill the desktop without a gutter or corners.
-            const update=async()=>setMaximized(await window.isFullscreen() || (await window.isMaximized() && state.boot?.platform === 'windows'));
+            // macOS zoom keeps a floating shell; fullscreen, Windows
+            // maximization and a maximized Linux window fill the desktop
+            // without a gutter or corners.
+            const update=async()=>setMaximized(await window.isFullscreen() || (await window.isMaximized() && state.boot?.platform !== 'macos'));
             await update();
             const resized=await window.onResized(()=>{void update();});
             const focused=await window.onFocusChanged(event=>setWindowActive(event.payload));
@@ -239,7 +240,9 @@ export function App() {
         return observePanel(winEl);
     }, [view,winEl,self?.id,!!prefs.local]);
     useEffect(() => {
-        if (state.boot?.platform === 'windows' && prefs.local) void shell.setStatusIcon(prefs.local.show_status_icon).catch(() => agent.fail('unavailable'));
+        // macOS owns its menu bar item; Windows and Linux draw the tray icon
+        // the local preference controls.
+        if (state.boot?.platform !== 'macos' && state.boot?.platform !== undefined && prefs.local) void shell.setStatusIcon(prefs.local.show_status_icon).catch(() => agent.fail('unavailable'));
     }, [state.boot?.platform,prefs.local?.show_status_icon]);
     useEffect(() => {if(prefs.local)void shell.setLogLevel(prefs.local.log_level).catch(()=>agent.fail('unavailable'));},[prefs.local?.log_level]);
     useEffect(() => {if(prefs.local)void shell.setLanguage(prefs.local.ui_language).catch(()=>agent.fail('unavailable'));},[prefs.local?.ui_language]);
@@ -709,7 +712,7 @@ export function App() {
                     } }} version={state.boot?.version ?? version} sideExtra={navMode === 'add' ? <SelfInfo container={winEl}/> : null} titleEnd={<><UpgradeButton/><PromoArea sponsor={!prefs.presentation.hide_sponsor} container={winEl}/></>} titleCenter={self?.paused ? <span className="win__paused"><PauseGlyph/>{tr('共享已暂停')}</span> : null} navBack={platform === 'win' && navMode !== 'devices' ? { title: navMode === 'add' ? tr('添加设备') : tr('设置'), label: tr('返回设备列表'), onBack: () => setNavMode('devices') } : null} nav={collapsed => <>
           <div className="nav-stack">
             {platform === 'win' && <RequestsGroup pairing={pairing} collapsed={collapsed} onExpand={() => setNavOpen(true)} hidden={navMode === 'settings'}/>}
-            <div className="nav-view" key={navMode} data-view={navMode} data-anim={navSwitched ? '' : undefined}>{platform === 'mac' && <><AddHead open={navMode !== 'devices'} title={navMode === 'add' ? tr('添加设备') : tr('设置')} onBack={() => setNavMode('devices')}/><RequestsGroup pairing={pairing} collapsed={collapsed} onExpand={() => setNavOpen(true)} hidden={navMode === 'settings'}/></>}{navMode === 'add' ? <AddPanel pairing={pairing}/> : navMode === 'settings' ? <SettingsNav platform={platform} query={query} onQuery={setQuery} active={section} onJump={id => setJump({ section: id, n: Date.now() })}/> : <DeviceList onGrantPermission={grantDevicePermission} onGrantAccessibility={() => { void accessibilityGrant.grant('accessibility'); }} devices={devices} selectedId={selectedDevice} onSelect={id => { setNavOpen(true); selectDevice(id); }} onToggle={toggle} onPause={menu.onPause} onSpeaker={menu.onSpeaker} onMicrophone={microphone} hiddenScreens={hiddenScreens} collapsed={collapsed} now={Date.now()} onReorder={(id, placement) => api.moveDeviceOrder(id, placement)}/>}</div>
+            <div className="nav-view" key={navMode} data-view={navMode} data-anim={navSwitched ? '' : undefined}>{platform !== 'win' && <><AddHead open={navMode !== 'devices'} title={navMode === 'add' ? tr('添加设备') : tr('设置')} onBack={() => setNavMode('devices')}/><RequestsGroup pairing={pairing} collapsed={collapsed} onExpand={() => setNavOpen(true)} hidden={navMode === 'settings'}/></>}{navMode === 'add' ? <AddPanel pairing={pairing}/> : navMode === 'settings' ? <SettingsNav platform={platform} query={query} onQuery={setQuery} active={section} onJump={id => setJump({ section: id, n: Date.now() })}/> : <DeviceList onGrantPermission={grantDevicePermission} onGrantAccessibility={() => { void accessibilityGrant.grant('accessibility'); }} devices={devices} selectedId={selectedDevice} onSelect={id => { setNavOpen(true); selectDevice(id); }} onToggle={toggle} onPause={menu.onPause} onSpeaker={menu.onSpeaker} onMicrophone={microphone} hiddenScreens={hiddenScreens} collapsed={collapsed} now={Date.now()} onReorder={(id, placement) => api.moveDeviceOrder(id, placement)}/>}</div>
           </div>
         </>}>
         <div className="disp" data-hidden={navMode === 'settings' ? '' : undefined} aria-hidden={navMode === 'settings' || undefined} inert={navMode === 'settings'}>
@@ -736,7 +739,7 @@ export function App() {
     return <OinkProvider locale={language === 'zh-Hans' ? 'zh-CN' : 'en-US'} defaultAccent={DEFAULT_ACCENT.value}>
     <AppearanceSync local={prefs.local} presentation={prefs.presentation}/><div className="oink-app" data-package-drag={view==='main'&&packageDrag?'':undefined} data-view={view} data-platform={platform} data-edge-to-edge={maximized ? '' : undefined}>
       {view === 'main' && <div className="win-shadow" aria-hidden="true"><div className="win-shadow__shape"/></div>}
-      {body}{view === 'main' && !maximized && <ResizeEdges platform={platform}/>}{(view==='main'||view==='panel')&&!packageDrag&&<StatusNotices/>}
+      {body}{view === 'main' && !maximized && platform !== 'linux' && <ResizeEdges platform={platform}/>}{(view==='main'||view==='panel')&&!packageDrag&&<StatusNotices/>}
       {winEl && <>{!onboarding && <PairDialog pairing={pairing} container={winEl}/>}<BlockListDialog loading={state.blocked === null} pending={unblocking} error={blockError} open={blockedOpen} blocked={pairing.blocked} container={winEl} onClose={() => setBlockedOpen(false)} onRemove={p => { setBlockError(null); setUnblocking(ids => [...ids,p.id]); void pairing.actions.unblock(p).catch(() => setBlockError(problemText('unavailable'))).finally(() => setUnblocking(ids => ids.filter(id => id !== p.id))); }}/>
         {view === 'main' && <UpgradeDialog container={winEl}/>}
         {view === 'main' && <CreateProfileDialog open={createOpen} state={profiles} container={winEl} onClose={() => setCreateOpen(false)} onSubmit={createProfile}/>}

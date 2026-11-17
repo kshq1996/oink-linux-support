@@ -35,6 +35,8 @@ pub mod diagnostics;
 pub mod display_power;
 pub mod gesture_trace;
 pub mod jitter;
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 pub mod native_lifecycle;
@@ -72,6 +74,9 @@ pub use windows::raw_capture::dispatch_guard as dispatch_raw_clip_guard;
 #[cfg(windows)]
 pub use windows::service as windows_service;
 
+/// Linux（X11）的键表在所有平台都编译：编辑器在任意一台上都能校验另一台的键集。
+#[path = "linux/keymap.rs"]
+mod linux_keymap;
 /// Pure native key tables are available on both OSes so an editor on either
 /// device can validate a different source/target without guessing its key set.
 #[path = "macos/keymap.rs"]
@@ -83,6 +88,7 @@ pub fn native_key_supported(os: &str, code: KeyCode) -> bool {
     match os {
         "macos" => mac_keymap::hid_to_mac(code).is_some() || mac_keymap::hid_to_nx(code).is_some(),
         "windows" => win_keymap::lookup_hid(code).is_some(),
+        "linux" => linux_keymap::keysym_from_hid(code).is_some(),
         _ => false,
     }
 }
@@ -442,6 +448,8 @@ pub fn platform_backend() -> Result<Box<dyn InputBackend>, InputError> {
     return macos::backend();
     #[cfg(windows)]
     return windows::backend();
+    #[cfg(target_os = "linux")]
+    return linux::backend();
     #[allow(unreachable_code)]
     Err(InputError::Unsupported)
 }

@@ -12,5 +12,10 @@ describe('Paste as File',()=>{
    expect(text(row.desc,platform)).toContain(platform==='mac'?'Finder':'资源管理器');
   }
  });
+ it('offers no native file manager on Linux, where the paste tool does not apply',()=>{
+  setLanguage('zh-Hans');
+  const sections=sectionsFor('linux');
+  expect(sections.find(s=>s.id==='tools')?.items.find(i=>i.id==='pasteAsFile')).toBeUndefined();
+ });
  it('enables the tool by default',()=>expect(DEFAULT_PREFS.pasteAsFile).toBe(true));
 });

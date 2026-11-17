@@ -84,6 +84,8 @@ fn read_service_type(sock: &std::net::UdpSocket) -> i32 {
 
 #[cfg(any(target_os = "macos", test))]
 mod datagram;
+#[cfg(target_os = "linux")]
+mod linux_udp;
 #[cfg(any(windows, test))]
 mod source_hint;
 #[cfg(target_os = "macos")]
@@ -201,6 +203,12 @@ impl quinn::AsyncUdpSocket for DestinationSocket {
 /// limited token; that does not establish NIC egress or Quinn per-packet marking.
 /// No Windows marking is configured here. Arbitrary QOSSetOutgoingDSCPValue needs
 /// Administrators/Network Configuration Operators.
+/// Linux marks the way Quinn does: its per-packet IP_TOS cmsg carries only
+/// ECN and overwrites socket-level DSCP, exactly as on Darwin. Keeping EF on
+/// Linux needs its own sendmsg path and its own GSO trade-off, so no Linux
+/// marking is configured here. Linux also reports an ICMP unreachable on a
+/// connected socket through SO_ERROR instead of a receive error, and never
+/// marks such a socket readable; the probe adapter reads it explicitly.
 #[cfg(any(target_os = "macos", test))]
 pub(crate) fn wrap_udp_socket(socket: std::net::UdpSocket) -> std::io::Result<Arc<dyn quinn::AsyncUdpSocket>> {
     Ok(Arc::new(DestinationSocket(wrap_udp_socket_inner(socket)?, None)))
@@ -232,7 +240,11 @@ pub(crate) fn wrap_probe_socket(socket: std::net::UdpSocket) -> std::io::Result<
     {
         windows_udp::Socket::wrap_mode(socket, true)
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        linux_udp::Socket::wrap_probe(socket)
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         quinn::Runtime::wrap_udp_socket(&quinn::TokioRuntime, socket)
     }

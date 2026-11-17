@@ -43,11 +43,7 @@ fn rich_text_readers_do_not_create_a_waiting_file_transfer() {
                 ClipData::Html("<p>clipboard reader</p>".repeat(40)),
                 ClipData::Text("clipboard reader".into()),
                 ClipData::Custom {
-                    platform: if cfg!(target_os = "macos") {
-                        oink_foundation::clipboard::ClipPlatform::Mac
-                    } else {
-                        oink_foundation::clipboard::ClipPlatform::Windows
-                    },
+                    platform: oink_foundation::clipboard::ClipPlatform::local(),
                     name: "org.oink.test.native".into(),
                     bytes: vec![0x5a; 1903],
                 },

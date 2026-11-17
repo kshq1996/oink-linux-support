@@ -1,4 +1,7 @@
 //! Process-local snapshots: OS inspection never runs on an IPC reader's thread.
+//! The microphone plugin belongs to the macOS and Windows audio backends, so
+//! its inspection results stay unused in a Linux build.
+#![cfg_attr(target_os = "linux", allow(dead_code))]
 use super::*;
 use std::sync::{Condvar, Mutex, OnceLock};
 

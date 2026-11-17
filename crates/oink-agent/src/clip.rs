@@ -759,11 +759,7 @@ impl Task {
             .id()
             .and_then(oink_clipboard::wire::local_offer_id)
             .map_err(|_| E::Unsupported)?;
-        let target = if cfg!(target_os = "macos") {
-            oink_foundation::clipboard::ClipPlatform::Mac
-        } else {
-            oink_foundation::clipboard::ClipPlatform::Windows
-        };
+        let target = oink_foundation::clipboard::ClipPlatform::local();
         let existing = self
             .shared
             .native_target

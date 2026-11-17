@@ -70,7 +70,8 @@ impl Location {
         location.followed = followed;
         Ok(location)
     }
-    fn matches(&self, path: &Path, current: &local::Fingerprint) -> io::Result<bool> {
+    // `path` 只有 macOS/Windows 的卷校验用得上；其它平台按身份比较。
+    fn matches(&self, _path: &Path, current: &local::Fingerprint) -> io::Result<bool> {
         if current.identity[1] != self.fingerprint.identity[1]
             || current.created != self.fingerprint.created
             || current.directory != self.fingerprint.directory
@@ -78,9 +79,9 @@ impl Location {
             return Ok(false);
         }
         #[cfg(target_os = "macos")]
-        return Ok(mac::volume_uuid(path)? == self.native.volume_uuid);
+        return Ok(mac::volume_uuid(_path)? == self.native.volume_uuid);
         #[cfg(windows)]
-        return Ok(current.identity[0] == self.fingerprint.identity[0] && windows::volume(path)? == self.volume);
+        return Ok(current.identity[0] == self.fingerprint.identity[0] && windows::volume(_path)? == self.volume);
         #[cfg(not(any(target_os = "macos", windows)))]
         Ok(current.identity == self.fingerprint.identity)
     }
@@ -143,7 +144,9 @@ impl Location {
         let path = self.native.resolve(self)?;
         #[cfg(windows)]
         let path = windows::resolve(&self.volume, self.fingerprint.identity[1])?;
-        #[cfg(not(any(target_os = "macos", windows)))]
+        #[cfg(target_os = "linux")]
+        let path = linux::resolve(self)?;
+        #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
         let path = self.path.clone();
         let current = local::inspect(&path)?;
         if !self.matches(&path, &current)? {
@@ -289,6 +292,8 @@ mod mac {
     }
 }
 
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(windows)]
 mod windows {
     use super::*;

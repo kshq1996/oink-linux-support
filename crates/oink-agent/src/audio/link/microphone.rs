@@ -1,4 +1,7 @@
 //! Microphone ownership is serialized by the existing audio control worker.
+//! The native audio backends exist on macOS and Windows only, so the runtime
+//! parameters and buffers stay unused in a Linux build.
+#![cfg_attr(target_os = "linux", allow(unused_variables, unused_mut))]
 use super::*;
 use dto::{ControlFailure as Failure, LocalOption};
 
@@ -255,14 +258,16 @@ impl Owner {
         None
     }
     pub(super) fn tick_microphone(&mut self) {
-        if self.driver_change_active() {
-            return;
-        }
         #[cfg(any(target_os = "macos", windows))]
-        if self.microphone.native {
-            let mut runtime = self.microphone.runtime.take().unwrap_or_default();
-            runtime.tick(self);
-            self.microphone.runtime = Some(runtime);
+        {
+            if self.driver_change_active() {
+                return;
+            }
+            if self.microphone.native {
+                let mut runtime = self.microphone.runtime.take().unwrap_or_default();
+                runtime.tick(self);
+                self.microphone.runtime = Some(runtime);
+            }
         }
     }
     pub(super) fn refresh_microphone(&mut self) {
@@ -280,14 +285,16 @@ impl Owner {
         }
     }
     pub(super) fn microphone_message(&mut self, peer: DeviceId, message: &Message) {
-        if self.driver_change_active() {
-            return;
-        }
         #[cfg(any(target_os = "macos", windows))]
-        if self.microphone.native {
-            let mut runtime = self.microphone.runtime.take().unwrap_or_default();
-            runtime.message(self, peer, message);
-            self.microphone.runtime = Some(runtime);
+        {
+            if self.driver_change_active() {
+                return;
+            }
+            if self.microphone.native {
+                let mut runtime = self.microphone.runtime.take().unwrap_or_default();
+                runtime.message(self, peer, message);
+                self.microphone.runtime = Some(runtime);
+            }
         }
     }
 }

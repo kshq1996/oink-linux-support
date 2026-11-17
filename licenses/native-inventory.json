@@ -34,7 +34,9 @@
       "platforms": [
         "macos-arm64",
         "macos-x64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64",
+        "linux-arm64"
       ],
       "cargoPackage": {
         "name": "opusic-sys",
@@ -213,7 +215,9 @@
       "platforms": [
         "macos-arm64",
         "macos-x64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64",
+        "linux-arm64"
       ],
       "licenseFiles": [
         {
@@ -249,7 +253,9 @@
       "platforms": [
         "macos-arm64",
         "macos-x64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64",
+        "linux-arm64"
       ],
       "licenseFiles": [
         {
@@ -285,7 +291,9 @@
       "platforms": [
         "macos-arm64",
         "macos-x64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64",
+        "linux-arm64"
       ],
       "licenseFiles": [
         {
@@ -390,7 +398,9 @@
       "platforms": [
         "macos-arm64",
         "macos-x64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64",
+        "linux-arm64"
       ],
       "licenseFiles": [
         {

@@ -18,7 +18,7 @@ beforeAll(() => {
   attribution.mockImplementation(async (path: string) => path === 'third-party-licenses.json' ? JSON.stringify({ schemaVersion: 1, components: [component] }) : 'License text');
 });
 afterEach(cleanup);
-function about(platform: 'mac' | 'win' = 'mac') {
+function about(platform: 'mac' | 'win' | 'linux' = 'mac') {
   return render(<OinkProvider><div className="oink-app" data-view="about"><AboutWindow platform={platform} open front version="0.1.0-beta.0123abcd" build="17" stage={{ w: 360, h: 500 }} onFront={() => {}} onClose={() => {}} /></div></OinkProvider>);
 }
 describe('About native content', () => {
@@ -26,12 +26,12 @@ describe('About native content', () => {
     about();
     expect(screen.getByText(/0\.1\.0-beta\.0123abcd \(17\)/)).toBeTruthy();
   });
-  it.each(['mac', 'win'] as const)('fills the %s native frame without a rounded content clip', platform => {
+  it.each(['mac', 'win', 'linux'] as const)('fills the %s native frame without a rounded content clip', platform => {
     const { container } = about(platform);
     const root = container.querySelector<HTMLElement>('.win.about')!;
     expect(getComputedStyle(root).borderRadius).toBe('0');
     expect(getComputedStyle(root).boxShadow).toBe('none');
-    if (platform === 'win') expect(screen.queryByRole('button', { name: /Close|关闭/ })).toBeNull();
+    if (platform !== 'mac') expect(screen.queryByRole('button', { name: /Close|关闭/ })).toBeNull();
   });
   it('preserves the separate rounded menu panel', () => {
     const { container } = render(<div className="oink-app" data-view="panel"><div className="native-panel" /></div>);

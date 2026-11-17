@@ -3,6 +3,7 @@ import { DEFAULT_SHORTCUTS } from './Shortcuts';
 import type { ShortcutId, ShortcutPref } from './Shortcuts';
 export type MacKey = 'control' | 'option' | 'command' | 'shift' | 'caps';
 export type WinKey = 'ctrl' | 'win' | 'alt' | 'shift' | 'caps';
+export type LinuxKey = 'control' | 'super' | 'alt' | 'shift' | 'caps';
 export type KeyPreset = 'mac' | 'win' | 'custom';
 export interface KeyMap {
     keys: Record<string, string>;
@@ -10,6 +11,7 @@ export interface KeyMap {
 }
 export const MAC_KEYS: MacKey[] = ['caps', 'shift', 'control', 'option', 'command'];
 export const WIN_KEYS: WinKey[] = ['caps', 'shift', 'ctrl', 'win', 'alt'];
+export const LINUX_KEYS: LinuxKey[] = ['caps', 'shift', 'control', 'super', 'alt'];
 export const KEY_NAMES: Record<Platform, Record<string, {
     name: string;
     sym?: string;
@@ -19,12 +21,21 @@ export const KEY_NAMES: Record<Platform, Record<string, {
         fn: { name: 'Fn', sym: '🌐' }, shift: { name: 'shift', sym: '⇧' }, caps: { name: 'caps lock', sym: '⇪' },
     },
     win: { ctrl: { name: 'Ctrl' }, win: { name: 'Win' }, alt: { name: 'Alt' }, shift: { name: 'Shift' }, caps: { name: 'Caps Lock' } },
+    linux: { control: { name: 'Control' }, super: { name: 'Super' }, alt: { name: 'Alt' }, shift: { name: 'Shift' }, caps: { name: 'Caps Lock' } },
 };
 export function presetMap(platform: Platform, preset: Exclude<KeyPreset, 'custom'>, capsIme: boolean): KeyMap {
     if (platform === 'mac') {
         return preset === 'mac'
             ? { keys: { control: 'win', option: 'alt', command: 'ctrl', shift: 'shift', caps: capsIme ? 'shift' : 'caps' }, capsLong: capsIme ? 'caps' : undefined }
             : { keys: { control: 'ctrl', option: 'win', command: 'alt', shift: 'shift', caps: 'caps' } };
+    }
+    if (platform === 'linux') {
+        // A Linux source drives a Mac target, so Control and Super take the
+        // places Command and Control hold there. The Mac feel swaps them, the
+        // Windows feel swaps Alt and Super, as the backend presets do.
+        return preset === 'mac'
+            ? { keys: { control: 'command', super: 'control', alt: 'option', shift: 'shift', caps: 'caps' } }
+            : { keys: { control: 'control', super: 'option', alt: 'command', shift: 'shift', caps: 'caps' } };
     }
     return preset === 'win'
         ? { keys: { ctrl: 'command', win: 'control', alt: 'option', shift: 'shift', caps: 'caps' } }
@@ -82,8 +93,8 @@ export const DEFAULT_PREFS: Prefs = {
     escStop: true,
     language: 'auto',
     keyPreset: 'mac',
-    keyCustom: { mac: presetMap('mac', 'mac', false), win: presetMap('win', 'win', false) },
-    keyCustomTouched: { mac: false, win: false },
+    keyCustom: { mac: presetMap('mac', 'mac', false), win: presetMap('win', 'win', false), linux: presetMap('linux', 'mac', false) },
+    keyCustomTouched: { mac: false, win: false, linux: false },
     capsSplit: false,
     allowFnMapping: false,
     pollLimit: '125',

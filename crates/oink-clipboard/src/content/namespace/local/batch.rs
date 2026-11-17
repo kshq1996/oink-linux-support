@@ -129,6 +129,14 @@ impl Batch {
         }
         let target = path.canonicalize()?;
         let fingerprint = inspect(&target)?;
+        #[cfg(target_os = "linux")]
+        if fingerprint.directory {
+            // Linux does not traverse a directory link: the linked tree is
+            // outside the offered root, and publishing it would extend the
+            // grant beyond the tree the user selected. A link to a regular
+            // file is followed, exactly like the other platforms do.
+            return Ok(None);
+        }
         readable(&target, &fingerprint)?;
         let internal = self.inside(&target, &fingerprint)?;
         if cfg!(windows) && internal.is_some() {

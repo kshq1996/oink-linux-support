@@ -125,14 +125,19 @@ fn refresh(app: &AppHandle) {
         }
         #[cfg(target_os = "macos")]
         crate::dock_controls::update(app, &model);
-        #[cfg(windows)]
-        if let Err(error) = windows_menu(app, &model) {
+        #[cfg(any(windows, target_os = "linux"))]
+        if let Err(error) = tray_menu(app, &model) {
             tracing::warn!(%error,"native tray menu update failed");
         }
     });
 }
-#[cfg(windows)]
-fn windows_menu(app: &AppHandle, model: &oink_agent::native_controls::Model) -> tauri::Result<()> {
+/// The menu model is the same on every desktop: the same groups, the same
+/// tasks and the same identifiers the native controls dispatch on.
+#[cfg(any(windows, target_os = "linux"))]
+fn build_menu(
+    app: &AppHandle,
+    model: &oink_agent::native_controls::Model,
+) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
     let menu = Menu::new(app)?;
     for group in &model.groups {
@@ -159,10 +164,20 @@ fn windows_menu(app: &AppHandle, model: &oink_agent::native_controls::Model) -> 
             None::<&str>,
         )?)?;
     }
+    Ok(menu)
+}
+
+/// The tray shows the shared menu model. Windows additionally owns the
+/// native taskbar menu and the jump list of its own menu.
+#[cfg(any(windows, target_os = "linux"))]
+fn tray_menu(app: &AppHandle, model: &oink_agent::native_controls::Model) -> tauri::Result<()> {
+    let menu = build_menu(app, model)?;
     if let Some(tray) = app.tray_by_id("main") {
         tray.set_menu(Some(menu.clone()))?;
+        #[cfg(windows)]
         crate::tray_windows::set_menu(menu, model)?;
     }
+    #[cfg(windows)]
     if let Err(error) = crate::jump_controls::update(app, model) {
         tracing::warn!(%error,"taskbar menu update failed");
     }

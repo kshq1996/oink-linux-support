@@ -16,7 +16,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it.each([1, 1.25, 1.5, 2, 3].flatMap(dpr => ['horizontal', 'vertical'].flatMap(axis =>
-    (['mac', 'win'] as const).map(platform => ({ dpr, axis, platform })))))(
+    (['mac', 'win', 'linux'] as const).map(platform => ({ dpr, axis, platform })))))(
     'preserves exact $axis contacts on $platform at $dpr× and a fractional canvas origin', ({ dpr, axis, platform }) => {
     vi.stubGlobal('devicePixelRatio', dpr);
     // Reported build-3028 geometry (revision 16), stripped of device identities.
@@ -35,7 +35,7 @@ it.each([1, 1.25, 1.5, 2, 3].flatMap(dpr => ['horizontal', 'vertical'].flatMap(a
     // Per-tile translates make WebKit rasterize the surfaces in different local
     // pixel phases even when getBoundingClientRect reports the same global edge.
     for (const style of [top, bottom]) {
-        if (platform === 'mac') expect(style.transform).toBe('');
+        if (platform !== 'win') expect(style.transform).toBe('');
         else {
             // Chromium needs translates to retain fractional-DPR coordinates
             // below CSS layout's 1/64 px precision; left/top would add a seam.
@@ -44,7 +44,7 @@ it.each([1, 1.25, 1.5, 2, 3].flatMap(dpr => ['horizontal', 'vertical'].flatMap(a
             expect(style.top).toBe('');
         }
     }
-    const position = (style: CSSStyleDeclaration) => platform === 'mac'
+    const position = (style: CSSStyleDeclaration) => platform !== 'win'
         ? [parseFloat(style.left), parseFloat(style.top)] : style.transform.match(/-?[\d.]+/g)!.map(Number);
     const horizontal = axis === 'horizontal';
     const index = horizontal ? 1 : 0;
