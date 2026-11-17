@@ -13,6 +13,7 @@
 
 mod enumerate;
 mod geometry;
+mod wallpaper;
 mod watch;
 
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -38,6 +39,7 @@ pub(crate) fn backend() -> Result<Box<dyn DisplayBackend>, DisplayError> {
         screen,
         handlers: watch::Handlers::default(),
         watcher: Mutex::new(None),
+        wallpaper_watcher: Mutex::new(None),
     }))
 }
 
@@ -47,6 +49,7 @@ struct LinuxDisplays {
     screen: usize,
     handlers: watch::Handlers,
     watcher: Mutex<Option<watch::Watcher>>,
+    wallpaper_watcher: Mutex<Option<wallpaper::Watcher>>,
 }
 
 impl DisplayBackend for LinuxDisplays {
@@ -64,6 +67,23 @@ impl DisplayBackend for LinuxDisplays {
                 self.connection.clone(),
                 self.screen,
             )?);
+        }
+        Ok(())
+    }
+
+    fn wallpapers(&self) -> Option<Vec<crate::wallpaper::DisplayWallpaper>> {
+        // 先取显示器列表就放开连接：解码壁纸慢，不该挡住监听线程。
+        let displays = {
+            let connection = lock(&self.connection);
+            enumerate::displays(&connection, self.screen).ok()?
+        };
+        wallpaper::read_all(&displays)
+    }
+
+    fn watch_wallpaper(&self, on_change: ChangeHandler) -> Result<(), DisplayError> {
+        let mut watcher = lock(&self.wallpaper_watcher);
+        if watcher.is_none() {
+            *watcher = wallpaper::Watcher::spawn(on_change);
         }
         Ok(())
     }

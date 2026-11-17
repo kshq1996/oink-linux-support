@@ -37,6 +37,8 @@ The Linux backends use X11: input capture and injection through XRecord and XTes
 
 System audio is not available on Linux yet: playing another device's audio on this device and sharing the microphone need a native audio backend, which Linux does not have yet. Everything else — keyboard, mouse, trackpad, clipboard, display layout and device discovery — works.
 
+The layout view draws the desktop wallpaper as the background of each screen, read from the KDE Plasma or GNOME settings.
+
 On an immutable Fedora system, such as BazziteOS, Universal Blue or a Fedora
 Silverblue image, the root filesystem cannot be changed, so `dnf install` of a
 local `.rpm` fails. Layer the package instead and reboot into it:

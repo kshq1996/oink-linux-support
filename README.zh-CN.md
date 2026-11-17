@@ -37,6 +37,8 @@ Linux 后端使用 X11：输入采集与注入通过 XRecord 和 XTest，剪贴�
 
 系统音频在 Linux 上暂不可用：把其他设备的音频播放到本机、共享麦克风都需要原生音频后端，Linux 尚无该后端。其余功能——键盘、鼠标、触控板、剪贴板、显示器布局与设备发现——均可正常使用。
 
+布局界面把桌面壁纸画成每块屏幕的背景，壁纸读自 KDE Plasma 或 GNOME 的设置。
+
 在不可变的 Fedora 系统上，例如 BazziteOS、Universal Blue 或 Fedora Silverblue，根文件系统无法更改，因此 `dnf install` 本地 `.rpm` 会失败。请改为分层安装，然后重启进入：
 
 ```

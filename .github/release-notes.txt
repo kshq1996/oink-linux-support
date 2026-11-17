@@ -3,6 +3,7 @@ Oink 0.3.6 is the first Linux release: Oink now runs on Linux desktops next to t
 ## New
 
 - Oink now runs on Linux, for both x64 and arm64, as a `.deb` package for Debian, Ubuntu and Linux Mint and an `.rpm` package for Fedora, openSUSE and RHEL. Keyboard, mouse, trackpad, clipboard, display layout and device discovery work on Linux; system audio and the cursor trail overlay do not yet.
+- On Linux, the screens in the layout show the desktop wallpaper as their background instead of a flat grey, so it is clear which machine a screen belongs to.
 - Reworked automatic updates.
 - On Mac, verification after dragging in the installer is faster.
 - The pointer event rate limit offers more levels to choose from.
@@ -17,6 +18,8 @@ Oink 0.3.6 is the first Linux release: Oink now runs on Linux desktops next to t
 - The `.rpm` package now installs on openSUSE as well: the WebKitGTK, indicator and sound libraries have different names there than on Fedora, and the requirement now lists the names every distribution uses.
 - The `.rpm` package now installs on a distribution that only ships the legacy AppIndicator library, because the tray icon falls back to it at runtime.
 - The `.deb` package now states the C library version it needs. A system with an older C library refuses the installation with a clear message, instead of installing a program that cannot start.
+- Fixed the pointer on Linux not reaching the screen edges. X11 has no application-level pointer area, so Oink no longer reports the whole screen as one: pointer moves from another device are no longer clamped back, and another device can take over at the edge of the screen.
+- Fixed "Start at login" not working on Linux. The background process registers the interface program that the package installs next to it.
 - The README now names the distributions the packages were verified on and explains how to install the package on an immutable system such as BazziteOS, where the root filesystem cannot be changed and the package has to be layered with `rpm-ostree`.
 - Fixed the Oink background on Windows no longer responding after being idle for a long time, which made the device list, speakers and microphones unavailable.
 - Fixed uninstalling failing on Windows (#46).
