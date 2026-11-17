@@ -45,6 +45,10 @@ pub(crate) enum Message {
     Wake,
     /// 停止截获。
     Stop,
+    /// 读取线程没能启用 RECORD：截获不可用。
+    CaptureFailed,
+    /// 读取线程已经启用 RECORD：截获可用。
+    CaptureReady,
 }
 
 /// 截获到的原始事件。
@@ -133,6 +137,12 @@ fn start_inner(
     let wake: Wake = Arc::new(move || {
         let _ = wake_tx.send(Message::Wake);
     });
+    // 唤醒源在这里就装好，不等派发线程：路由线程紧接着发出的第一条命令
+    // 不能撞上「还没有唤醒源」的窗口（那次会 panic，并把整个后台进程带崩）。
+    let mut owner = owner;
+    if let Some(owner) = owner.as_mut() {
+        owner.set_wake(wake.clone());
+    }
     let reader = std::thread::Builder::new().name("oink-x11-record".to_string()).spawn({
         let inner = Arc::clone(inner);
         let tx = tx.clone();
@@ -153,7 +163,7 @@ fn start_inner(
         .name("oink-x11-dispatch".to_string())
         .spawn({
             let inner = Arc::clone(inner);
-            move || dispatch(inner, handler, owner, wake, rx)
+            move || dispatch(inner, handler, owner, rx)
         });
     let dispatcher = match dispatcher {
         Ok(dispatcher) => dispatcher,
@@ -215,14 +225,18 @@ fn read_records(inner: Arc<Inner>, data: RustConnection, context: u32, tx: mpsc:
         Ok(stream) => stream,
         Err(error) => {
             tracing::error!("XRecord 启用失败：{error}");
+            let _ = tx.send(Message::CaptureFailed);
             return;
         }
     };
+    // RECORD 已经启用：截获可用，界面不再把键鼠显示成「不可用」。
+    let _ = tx.send(Message::CaptureReady);
     for reply in stream {
         let reply = match reply {
             Ok(reply) => reply,
             Err(error) => {
                 tracing::warn!("XRecord 读取失败：{error}");
+                let _ = tx.send(Message::CaptureFailed);
                 break;
             }
         };
@@ -238,12 +252,12 @@ fn dispatch(
     inner: Arc<Inner>,
     handler: EventHandler,
     owner: Option<Box<dyn CaptureLoop>>,
-    wake: Wake,
     rx: mpsc::Receiver<Message>,
 ) {
     let routed = owner.is_some();
     if let Some(owner) = owner {
-        crate::capture_loop::install(owner, wake);
+        // 唤醒源已经在 [`start_inner`] 里装好，这里只把 owner 放进线程局部变量。
+        crate::capture_loop::install_owner(owner);
     }
     loop {
         let deadline = if routed {
@@ -276,6 +290,9 @@ fn dispatch(
             }
             Some(Message::Wake) => {}
             Some(Message::Stop) => break,
+            // 截获可用性由读取线程观察：RECORD 启用失败时界面要看到「不可用」。
+            Some(Message::CaptureReady) => crate::capture_loop::capture_available(true),
+            Some(Message::CaptureFailed) => crate::capture_loop::capture_available(false),
             None => {}
         }
     }
@@ -514,5 +531,84 @@ fn device_event_range() -> record::Range {
         errors: empty,
         client_started: false,
         client_died: false,
+    }
+}
+
+#[cfg(all(test, debug_assertions))]
+// 无 libtest 的构建会去掉 `#[test]` 的函数体，这些辅助函数因此没人调用。
+#[allow(dead_code)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+
+    use crate::capture_loop::{CaptureLoop, Wake};
+    use crate::{CapturedEvent, Disposition};
+
+    /// 记录 owner 收到的截获可用性与唤醒源。
+    struct Recorder {
+        /// owner 收到的可用性。
+        available: Arc<AtomicBool>,
+        /// owner 收到过通知。
+        reported: Arc<AtomicBool>,
+        /// owner 拿到了唤醒源。
+        wake: Arc<AtomicBool>,
+    }
+
+    impl CaptureLoop for Recorder {
+        fn set_wake(&mut self, _wake: Wake) {
+            self.wake.store(true, Ordering::Release);
+        }
+
+        fn event(&mut self, _event: &CapturedEvent) -> Disposition {
+            Disposition::Pass
+        }
+
+        fn capture_available(&mut self, available: bool) {
+            self.available.store(available, Ordering::Release);
+            self.reported.store(true, Ordering::Release);
+        }
+
+        fn poll(&mut self, _now: Instant) -> Option<Instant> {
+            None
+        }
+
+        fn stopped(&self) -> bool {
+            false
+        }
+    }
+
+    /// 截获可用时 owner 必须知道：界面靠这个把键鼠显示成「可以控制」。
+    ///
+    /// 需要真的 X 服务器（RECORD 扩展）：容器里的测试脚本会起一个 Xvfb。
+    #[test]
+    fn the_capture_reports_its_availability_to_the_owner() {
+        if std::env::var_os("DISPLAY").is_none() {
+            // 没有 X 会话就没有截获。
+            return;
+        }
+        let available = Arc::new(AtomicBool::new(false));
+        let reported = Arc::new(AtomicBool::new(false));
+        let wake = Arc::new(AtomicBool::new(false));
+        let Ok(backend) = crate::linux::backend() else {
+            // 服务器没有 RECORD 扩展：没有截获可测。
+            return;
+        };
+        let owner = Box::new(Recorder {
+            available: Arc::clone(&available),
+            reported: Arc::clone(&reported),
+            wake: Arc::clone(&wake),
+        });
+        backend.start_loop(owner).expect("截获可以启动");
+        // 唤醒源必须在 start_loop 返回前就装好：路由线程紧接着发出的第一条
+        // 命令会立刻用它，那时候截获线程还没来得及跑。
+        assert!(wake.load(Ordering::Acquire), "唤醒源没有在截获启动时装好");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !reported.load(Ordering::Acquire) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        backend.stop();
+        assert!(reported.load(Ordering::Acquire), "截获没有把可用性告诉 owner");
+        assert!(available.load(Ordering::Acquire), "截获应该是可用的");
     }
 }

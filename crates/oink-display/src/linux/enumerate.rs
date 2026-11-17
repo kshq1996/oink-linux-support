@@ -35,7 +35,12 @@ pub(crate) fn ensure_randr(connection: &RustConnection) -> Result<(), DisplayErr
 
 /// 当前会话里的显示器。
 pub(crate) fn displays(connection: &RustConnection, screen: usize) -> Result<Vec<DisplayInfo>, DisplayError> {
-    let root = connection.setup().roots[screen].root;
+    let setup = connection.setup();
+    let root = setup.roots[screen].root;
+    let root_size = (
+        u32::from(setup.roots[screen].width_in_pixels),
+        u32::from(setup.roots[screen].height_in_pixels),
+    );
     let resources = randr::get_screen_resources_current(connection, root)
         .map_err(connection_error)?
         .reply()
@@ -70,6 +75,10 @@ pub(crate) fn displays(connection: &RustConnection, screen: usize) -> Result<Vec
         }
     }
     let geometries: Vec<OutputGeometry> = outputs.into_iter().map(|(_, entry)| entry).collect();
+    // XWayland 报告的 CRTC 占位可能是缩放后的逻辑尺寸，指针与注入都在根窗口
+    // 像素空间里：显示器的几何要换算过去，否则指针会被限制在一小块区域里。
+    let scale = geometry::RootScale::between(root_size, geometry::crtc_extent(&geometries));
+    let geometries: Vec<OutputGeometry> = geometries.iter().map(|entry| entry.scaled(scale)).collect();
     let primary = geometry::select_primary(&geometries, server_primary);
     Ok(geometries
         .iter()

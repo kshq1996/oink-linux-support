@@ -38,6 +38,53 @@ pub(crate) struct OutputGeometry {
     pub(crate) mm_height: u32,
 }
 
+/// X11 根窗口与 RandR 扫描输出之间的比例。
+///
+/// XWayland 在桌面被缩放时按**逻辑尺寸**报告输出（CRTC 1280x800），而 X11 客户端
+/// 活在**根窗口的像素空间**里（1920x1200）：指针的坐标、截获与注入都在根窗口空间。
+/// 显示器的几何必须换算到根窗口空间，否则指针会被限制在逻辑尺寸那一小块区域里。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct RootScale {
+    /// 横向比例。
+    pub(crate) x: f64,
+    /// 纵向比例。
+    pub(crate) y: f64,
+}
+
+impl RootScale {
+    /// 根窗口尺寸与 CRTC 占位尺寸之间的比例。
+    ///
+    /// 两个方向的比例不一致时按 1 处理：那是输出没有铺满根窗口，不是缩放。
+    pub(crate) fn between(root: (u32, u32), crtcs: (u32, u32)) -> Self {
+        if crtcs.0 == 0 || crtcs.1 == 0 {
+            return Self { x: 1.0, y: 1.0 };
+        }
+        let x = f64::from(root.0) / f64::from(crtcs.0);
+        let y = f64::from(root.1) / f64::from(crtcs.1);
+        if (x - y).abs() <= 0.01 * x.max(y) {
+            Self { x, y }
+        } else {
+            Self { x: 1.0, y: 1.0 }
+        }
+    }
+
+    /// 是不是 1:1（没有缩放）。
+    pub(crate) fn is_identity(self) -> bool {
+        (self.x - 1.0).abs() < f64::EPSILON && (self.y - 1.0).abs() < f64::EPSILON
+    }
+}
+
+/// 若干输出的 CRTC 占位合起来的外接矩形（逻辑空间里的桌面大小）。
+pub(crate) fn crtc_extent(geometries: &[OutputGeometry]) -> (u32, u32) {
+    let mut width = 0f64;
+    let mut height = 0f64;
+    for geometry in geometries {
+        width = width.max(geometry.bounds.x + geometry.bounds.w);
+        height = height.max(geometry.bounds.y + geometry.bounds.h);
+    }
+    (width.round() as u32, height.round() as u32)
+}
+
 impl OutputGeometry {
     /// 稳定标识：连接名优先（重新插拔后不变），没有名字时退回 XID。
     pub(crate) fn key(&self) -> String {
@@ -113,6 +160,22 @@ impl OutputGeometry {
             is_virtual: false,
         }
     }
+    /// 换算到 X11 根窗口的像素空间。
+    pub(crate) fn scaled(&self, scale: RootScale) -> OutputGeometry {
+        if scale.is_identity() {
+            return self.clone();
+        }
+        let mut scaled = self.clone();
+        scaled.bounds = Rect::new(
+            self.bounds.x * scale.x,
+            self.bounds.y * scale.y,
+            self.bounds.w * scale.x,
+            self.bounds.h * scale.y,
+        );
+        scaled.mode_width = (f64::from(self.mode_width) * scale.x).round() as u32;
+        scaled.mode_height = (f64::from(self.mode_height) * scale.y).round() as u32;
+        scaled
+    }
 }
 
 /// 把 RandR 的旋转位掩码换算成角度。
@@ -161,6 +224,39 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_scaled_desktop_keeps_the_root_window_size() {
+        // XWayland 把缩放后的桌面报成逻辑尺寸，指针却在根窗口的像素空间里。
+        let geometry = output(7, "DP-1", Rect::new(0.0, 0.0, 1280.0, 800.0));
+        let scale = RootScale::between((1920, 1200), crtc_extent(std::slice::from_ref(&geometry)));
+        assert_eq!((scale.x, scale.y), (1.5, 1.5));
+        let scaled = geometry.scaled(scale);
+        assert_eq!(scaled.bounds, Rect::new(0.0, 0.0, 1920.0, 1200.0));
+        assert_eq!((scaled.mode_width, scaled.mode_height), (2880, 1620));
+    }
+
+    #[test]
+    fn an_unscaled_desktop_keeps_its_geometry() {
+        let geometry = output(7, "DP-1", Rect::new(0.0, 0.0, 1920.0, 1080.0));
+        let scale = RootScale::between((1920, 1080), crtc_extent(std::slice::from_ref(&geometry)));
+        assert!(scale.is_identity());
+        assert_eq!(geometry.scaled(scale), geometry);
+    }
+
+    #[test]
+    fn an_output_that_does_not_fill_the_root_is_not_a_scaled_desktop() {
+        // 两个方向的比例不一致：那是输出没铺满根窗口，不是桌面缩放。
+        let geometry = output(7, "DP-1", Rect::new(0.0, 0.0, 1920.0, 1080.0));
+        let scale = RootScale::between((1920, 1200), crtc_extent(std::slice::from_ref(&geometry)));
+        assert!(scale.is_identity());
+    }
+
+    #[test]
+    fn the_crtc_extent_covers_every_output() {
+        let first = output(1, "DP-1", Rect::new(0.0, 0.0, 1280.0, 800.0));
+        let second = output(2, "HDMI-1", Rect::new(1280.0, 0.0, 640.0, 800.0));
+        assert_eq!(crtc_extent(&[first, second]), (1920, 800));
+    }
     #[test]
     fn rotation_bits_map_to_degrees() {
         assert_eq!(rotation_deg(0), 0);

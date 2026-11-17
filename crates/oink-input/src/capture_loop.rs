@@ -98,6 +98,11 @@ thread_local! { static OWNER: RefCell<Option<Box<dyn CaptureLoop>>> = const { Re
 pub(crate) fn install(owner: Box<dyn CaptureLoop>, wake: Wake) {
     let mut owner = owner;
     owner.set_wake(wake);
+    install_owner(owner);
+}
+/// 只把 owner 放进线程局部变量：唤醒源已经在别处装好（Linux 的 X11 截获
+/// 在派发线程启动之前就装好了它，路由线程的第一条命令不能等）。
+pub(crate) fn install_owner(owner: Box<dyn CaptureLoop>) {
     OWNER.with(|slot| *slot.borrow_mut() = Some(owner));
 }
 pub(crate) fn capture_available(available: bool) {
