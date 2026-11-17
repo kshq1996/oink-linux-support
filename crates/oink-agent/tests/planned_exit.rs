@@ -176,10 +176,14 @@ fn restart_and_check(home: &Path, expected: usize) {
 fn fatal_host_panic_keeps_crash_recovery() {
     let _scenario = watchdog::Scenario::new(module_path!(), "fatal_host_panic_keeps_crash_recovery");
     let home = tempfile::tempdir().unwrap();
+    // The child panics on purpose. Its stderr stays in a file of its own, so
+    // the parent's harness never reads the child's panic as its own failure.
+    let child_stderr = std::fs::File::create(home.path().join("child.stderr")).unwrap();
     let mut child = Command::new(std::env::current_exe().unwrap())
         .args(["exit_child", "--exact", "--nocapture"])
         .env("OINK_TEST_EXIT_HOME", home.path())
         .env("OINK_TEST_EXIT_PANIC", "1")
+        .stderr(std::process::Stdio::from(child_stderr))
         .spawn()
         .unwrap();
     watchdog::phase(&format!("wait for synthetic-panic child pid={} to exit", child.id()));
