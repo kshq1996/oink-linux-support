@@ -45,8 +45,10 @@ local `.rpm` fails. Layer the package instead and reboot into it:
 sudo rpm-ostree install ./Oink-<version>-linux-<arch>.rpm
 ```
 
-The package is unsigned, so a package manager that insists on a signature
-needs `--nosignature` (`rpm-ostree install --nosignature ...`).
+`rpm-ostree` does not check the signature of a local package, so the
+unsigned file installs as it is, and the change takes effect after the
+reboot. A package manager that insists on a signature needs
+`--nosignature` (`rpm -i --nosignature ...`).
 
 ### Sponsor
 

@@ -19,17 +19,31 @@ Oink 是 Oink Is Not only a KVM 的缩写，是一款在多台 Windows、Mac 和
 
 - **Mac**：Apple 芯片（arm64），macOS 14.2 及以上；Intel（x64），macOS 14.2 及以上（未经测试）
 - **Windows**：x64，Windows 10 1809（build 17763）及以上，或 Windows 11。22H2 之前的 Windows 10 版本未经测试。Windows 10 LTSC（如 LTSC 2019 / LTSC 2021）不自带 WebView2 Runtime，请先安装 Microsoft Edge WebView2 Runtime（Evergreen）：https://developer.microsoft.com/microsoft-edge/webview2/
-- **Linux**：x64 与 arm64，需要带 X11（或 XWayland）的桌面会话。Debian、Ubuntu、Linux Mint 安装 `.deb` 包；Fedora、openSUSE、RHEL 安装 `.rpm` 包。
+- **Linux**：x64 与 arm64，需要带 X11（或 XWayland）的桌面会话。安装包在 Ubuntu 24.04 上构建，需要 glibc 2.39 及以上。Debian 13 及以上、Ubuntu 24.04 及以上、Linux Mint 22 及以上安装 `.deb` 包；Fedora 40 及以上、openSUSE Tumbleweed 安装 `.rpm` 包。
 
 如果 SmartScreen 提示“Windows 已保护你的电脑”，仅在出现相应选项时点击 **更多信息 → 仍要运行**。UAC 可能显示发布者未知。
 
 ### Linux
 
-Linux 安装包包含三个程序：托盘应用 `oink`、命令行工具 `oink-agent` 和后台进程 `oink-backend`。安装包声明了运行时依赖（WebKitGTK 4.1、GTK 3、libayatana-appindicator3），发行版的包管理器会补齐缺失的部分。
+Linux 安装包包含三个程序：托盘应用 `oink`、命令行工具 `oink-agent` 和后台进程 `oink-backend`。安装包声明了运行时依赖（WebKitGTK 4.1、GTK 3、libayatana-appindicator3）以及二进制文件所需的 C 库版本，发行版的包管理器会补齐缺失的部分，并拒绝 C 库过旧的系统。
+
+安装包没有签名。`dnf install` 与 `apt install` 会直接安装本地未签名的包，而 zypper 会停下来询问，默认答案是中止，因此这样安装：
+
+```
+sudo zypper --no-gpg-checks install ./Oink-<version>-linux-<arch>.rpm
+```
 
 Linux 后端使用 X11：输入采集与注入通过 XRecord 和 XTest，剪贴板通过 X11 选择协议，显示器布局通过 XRandR。Wayland 会话通过 XWayland 工作。macOS 和 Windows 上的光标拖尾覆盖层在 Linux 上不可用。
 
 系统音频在 Linux 上暂不可用：把其他设备的音频播放到本机、共享麦克风都需要原生音频后端，Linux 尚无该后端。其余功能——键盘、鼠标、触控板、剪贴板、显示器布局与设备发现——均可正常使用。
+
+在不可变的 Fedora 系统上，例如 BazziteOS、Universal Blue 或 Fedora Silverblue，根文件系统无法更改，因此 `dnf install` 本地 `.rpm` 会失败。请改为分层安装，然后重启进入：
+
+```
+sudo rpm-ostree install ./Oink-<version>-linux-<arch>.rpm
+```
+
+`rpm-ostree` 不校验本地安装包的签名，未签名的文件会原样安装，改动在重启后生效。
 
 ### 赞助
 

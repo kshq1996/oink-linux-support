@@ -19,17 +19,31 @@ Oink는 "Oink Is Not only a KVM"의 약자로, 여러 대의 Windows, Mac, Linux
 
 - **Mac**: Apple 실리콘(arm64), macOS 14.2 이상. Intel(x64), macOS 14.2 이상(테스트되지 않음)
 - **Windows**: x64, Windows 10 1809(빌드 17763) 이상 또는 Windows 11. 22H2 이전 Windows 10 버전은 테스트되지 않았습니다. Windows 10 LTSC(LTSC 2019 / LTSC 2021 등)에는 WebView2 Runtime이 기본으로 포함되지 않으므로, 먼저 Microsoft Edge WebView2 Runtime(Evergreen)을 설치하세요: https://developer.microsoft.com/microsoft-edge/webview2/
-- **Linux**: x64 및 arm64, X11(또는 XWayland)이 있는 데스크톱 세션 필요. Debian, Ubuntu, Linux Mint에서는 `.deb` 패키지를, Fedora, openSUSE, RHEL에서는 `.rpm` 패키지를 설치합니다.
+- **Linux**: x64 및 arm64, X11(또는 XWayland)이 있는 데스크톱 세션 필요. 패키지는 Ubuntu 24.04에서 빌드되며 glibc 2.39 이상이 필요합니다. Debian 13 이상, Ubuntu 24.04 이상, Linux Mint 22 이상에서는 `.deb` 패키지를, Fedora 40 이상, openSUSE Tumbleweed에서는 `.rpm` 패키지를 설치합니다.
 
 SmartScreen에 "Windows의 PC 보호" 메시지가 표시되면, 해당 옵션이 있을 때만 **추가 정보 → 실행**을 선택하세요. UAC에서 게시자를 알 수 없음으로 표시될 수 있습니다.
 
 ### Linux
 
-Linux 패키지는 세 가지 프로그램을 설치합니다: 트레이 애플리케이션 `oink`, 명령줄 도구 `oink-agent`, 백그라운드 프로세스 `oink-backend`. 패키지는 런타임 의존성(WebKitGTK 4.1, GTK 3, libayatana-appindicator3)을 선언하므로 배포판 패키지 관리자가 빠진 부분을 설치합니다.
+Linux 패키지는 세 가지 프로그램을 설치합니다: 트레이 애플리케이션 `oink`, 명령줄 도구 `oink-agent`, 백그라운드 프로세스 `oink-backend`. 패키지는 런타임 의존성(WebKitGTK 4.1, GTK 3, libayatana-appindicator3)과 바이너리가 필요로 하는 C 라이브러리 버전을 선언하므로, 배포판 패키지 관리자가 빠진 부분을 설치하고 C 라이브러리가 오래된 시스템의 설치는 거부합니다.
+
+패키지는 서명되어 있지 않습니다. `dnf install`과 `apt install`은 로컬의 서명되지 않은 패키지를 그대로 설치하지만, zypper는 무엇을 할지 묻다가 기본 답인 중단에서 멈추므로 다음과 같이 설치하세요:
+
+```
+sudo zypper --no-gpg-checks install ./Oink-<version>-linux-<arch>.rpm
+```
 
 Linux 백엔드는 X11을 사용합니다: 입력 캡처와 주입은 XRecord와 XTest, 클립보드는 X11 선택 프로토콜, 디스플레이 배치는 XRandR을 사용합니다. Wayland 세션에서는 XWayland를 통해 동작합니다. macOS와 Windows가 그리는 커서 트레일 오버레이는 Linux에서 사용할 수 없습니다.
 
 시스템 오디오는 Linux에서 아직 사용할 수 없습니다. 다른 기기의 오디오를 이 기기에서 재생하거나 마이크를 공유하려면 네이티브 오디오 백엔드가 필요한데, Linux에는 아직 없습니다. 키보드, 마우스, 트랙패드, 클립보드, 디스플레이 배치, 기기 탐색 등 나머지 기능은 모두 동작합니다.
+
+BazziteOS, Universal Blue, Fedora Silverblue 같은 불변의 Fedora 시스템에서는 루트 파일 시스템을 바꿀 수 없어 로컬 `.rpm`의 `dnf install`이 실패합니다. 대신 패키지를 레이어링하고 재부팅하세요:
+
+```
+sudo rpm-ostree install ./Oink-<version>-linux-<arch>.rpm
+```
+
+`rpm-ostree`는 로컬 패키지의 서명을 확인하지 않으므로 서명되지 않은 파일이 그대로 설치되고, 변경은 재부팅 후에 적용됩니다.
 
 ### 후원
 

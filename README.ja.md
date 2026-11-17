@@ -19,17 +19,31 @@ Oink は「Oink Is Not only a KVM」の略で、複数の Windows と Mac と Li
 
 - **Mac**：Apple シリコン（arm64）、macOS 14.2 以降。Intel（x64）、macOS 14.2 以降（未テスト）
 - **Windows**：x64、Windows 10 1809（ビルド 17763）以降、または Windows 11。22H2 より前の Windows 10 バージョンは未テストです。Windows 10 LTSC（LTSC 2019 / LTSC 2021 など）には WebView2 Runtime が付属しないため、先に Microsoft Edge WebView2 Runtime（Evergreen）をインストールしてください：https://developer.microsoft.com/microsoft-edge/webview2/
-- **Linux**：x64 と arm64、X11（または XWayland）のあるデスクトップセッションが必要です。Debian、Ubuntu、Linux Mint では `.deb`、Fedora、openSUSE、RHEL では `.rpm` パッケージをインストールします。
+- **Linux**：x64 と arm64、X11（または XWayland）のあるデスクトップセッションが必要です。パッケージは Ubuntu 24.04 でビルドされ、glibc 2.39 以降が必要です。Debian 13 以降、Ubuntu 24.04 以降、Linux Mint 22 以降では `.deb`、Fedora 40 以降、openSUSE Tumbleweed では `.rpm` パッケージをインストールします。
 
 SmartScreen に「Windows によって PC が保護されました」と表示された場合は、選択肢が表示されたときに限り **詳細情報 → 実行** を選んでください。UAC では発行元が不明と表示されることがあります。
 
 ### Linux
 
-Linux パッケージは 3 つのプログラムを導入します。トレイアプリケーションの `oink`、コマンドラインツールの `oink-agent`、バックグラウンドプロセスの `oink-backend` です。パッケージは実行時依存（WebKitGTK 4.1、GTK 3、libayatana-appindicator3）を宣言しているため、不足分はそのディストリビューションのパッケージマネージャーが導入します。
+Linux パッケージは 3 つのプログラムを導入します。トレイアプリケーションの `oink`、コマンドラインツールの `oink-agent`、バックグラウンドプロセスの `oink-backend` です。パッケージは実行時依存（WebKitGTK 4.1、GTK 3、libayatana-appindicator3）とバイナリが必要とする C ライブラリのバージョンを宣言しているため、不足分はそのディストリビューションのパッケージマネージャーが導入し、C ライブラリが古いシステムへの導入は拒否します。
+
+パッケージは署名されていません。`dnf install` と `apt install` はローカルの未署名パッケージをそのまま導入しますが、zypper は問い合わせて既定の答えである中断で止まるため、次のように導入してください：
+
+```
+sudo zypper --no-gpg-checks install ./Oink-<version>-linux-<arch>.rpm
+```
 
 Linux のバックエンドは X11 を使います。入力の取得と注入は XRecord と XTest、クリップボードは X11 の選択プロトコル、ディスプレイ配置は XRandR です。Wayland セッションでは XWayland 経由で動作します。macOS と Windows が描くカーソルトレイルのオーバーレイは Linux では利用できません。
 
 システムオーディオは Linux ではまだ利用できません。他のデバイスの音声をこのデバイスで再生したりマイクを共有したりするにはネイティブのオーディオバックエンドが必要ですが、Linux にはまだありません。キーボード、マウス、トラックパッド、クリップボード、ディスプレイ配置、デバイス探索など、ほかの機能はすべて動作します。
+
+Fedora Silverblue や BazziteOS、Universal Blue などの不変の Fedora システムではルートファイルシステムを変更できないため、ローカルの `.rpm` を `dnf install` することはできません。パッケージをレイヤリングして再起動してください：
+
+```
+sudo rpm-ostree install ./Oink-<version>-linux-<arch>.rpm
+```
+
+`rpm-ostree` はローカルパッケージの署名を検証しないため、未署名のファイルはそのまま導入され、変更は再起動後に反映されます。
 
 ### スポンサー
 
