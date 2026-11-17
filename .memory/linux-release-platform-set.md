@@ -19,9 +19,14 @@ The fork's release platform set (2026-11-17):
   signed and notarized macOS build, so including `macos` would fail the run.
 - Windows is unsigned in the fork unless the SignPath secrets
   (`SIGNPATH_API_TOKEN`, `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG`)
-  are configured; `public_release.py inputs` requires the DSN
-  (`OINK_REPORT_DSN`, EU region) for every release job, and the Windows MSI is
-  then published unsigned.
+  are configured; the Windows MSI is then published unsigned.
+- The reporting DSN (`OINK_REPORT_DSN`, EU region) is required for macOS and
+  Windows, and optional for Linux: `public_release.py inputs` takes the
+  platform, and `REPORTING_OPTIONAL` names the platforms that may build
+  without one. The Linux build then has no reporting configuration
+  (`option_env!("OINK_REPORT_DSN")` is empty), the check writes
+  `configured: false`, and `stage`/`assemble` accept that proof only for the
+  Linux platforms.
 
 **Why:** the release must publish exactly the platforms it can build, and a
 platform that is configured may never be silently missing from a release.
@@ -29,4 +34,7 @@ platform that is configured may never be silently missing from a release.
 repository variable to a comma-separated list of `macos`, `macos-x64`,
 `windows`, `linux-x64`, `linux-arm64`; never edit the workflow matrix by hand,
 because the matrix and the expected records must come from the same list.
+The release also needs the workflow triggers: a fork that never ran a
+workflow does not react to `push` or `pull_request` until a workflow file
+changes on the default branch, which re-registers the workflows.
 See also [[linux-platform-identity]].
