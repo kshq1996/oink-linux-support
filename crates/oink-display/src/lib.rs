@@ -12,6 +12,9 @@ use std::sync::Arc;
 pub use oink_foundation::display::DisplayInfo;
 
 pub mod arrangement;
+// The reference geometry helpers serve the macOS and Linux backends; the
+// Windows backend measures its panels differently.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod extent;
 pub mod layout;
 #[cfg(target_os = "linux")]
