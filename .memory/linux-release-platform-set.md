@@ -37,4 +37,21 @@ because the matrix and the expected records must come from the same list.
 The release also needs the workflow triggers: a fork that never ran a
 workflow does not react to `push` or `pull_request` until a workflow file
 changes on the default branch, which re-registers the workflows.
+
+**Republishing a version**: the user keeps the version at `0.3.6` instead of
+iterating it, so a fixed build replaces the release of the same version.
+`public_release.py publish` refuses to attach the assets to a tag that points
+at another commit (`release tag already targets a different commit`) and
+`gh release create` refuses an existing release, so the old release and its
+tag have to go first:
+
+```
+gh release delete v0.3.6 --cleanup-tag --repo kshq1996/oink-linux-support --yes
+git push origin main
+```
+
+The guard job then finds no release for the version and publishes the new
+build under the same tag. The published `release.json` carries the commit the
+assets were built from, so the tag of the replaced release moves to the new
+commit.
 See also [[linux-platform-identity]].
