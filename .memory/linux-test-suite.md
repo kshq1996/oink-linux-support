@@ -12,9 +12,11 @@ The Linux test suite of this fork (2026-11-17):
   tests and `cargo deny check`. `tools/linux/check.sh <cargo args>` runs a
   single cargo command, and `tools/linux/clean.sh --all` removes the images
   and the cached cargo/target volumes.
-- The workspace image is `oink-linux-build:0.3.6-<arch>`; the amd64 image has
-  to be built with `docker buildx build --platform linux/amd64` because the
-  workstation is arm64.
+- The workspace image is `oink-linux-build:<version>-<arch>`, and the version
+  comes from `packaging/identity.json`: `tools/linux/image.sh` reads it and
+  every script sources that helper, so a version bump needs no script edit.
+  The amd64 image has to be built with `docker buildx build --platform
+  linux/amd64` because the workstation is arm64.
 - **A full suite under an emulated amd64 container produces false failures.**
   On this workstation the amd64 run is Rosetta-emulated and 13 timing-sensitive
   agent tests (pairing, clipboard file transfer, projection, audio, IPC) time
