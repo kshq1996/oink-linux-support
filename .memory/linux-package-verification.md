@@ -27,6 +27,12 @@ v0.3.6 republish):
 - The login item is written to `$XDG_CONFIG_HOME`, so a check that looks in
   `~/.config/autostart` finds nothing when the run set `XDG_CONFIG_HOME` elsewhere.
 
+- On a real KDE session the same checks work over SSH, and the desktop session's environment has to
+  be borrowed: the agent reads the Plasma configuration from `$XDG_CONFIG_HOME`, which a login shell
+  without the session environment does not have (`/proc/<plasmashell>/environ` carries it).
+- The device the fork was verified on was `192.168.22.55` (SSH, user `kangshaoqi`). When it does not
+  answer, the published packages are the only evidence available; the container recipe above stands
+  in for it, and the on-device check stays open until the machine is back.
 **Why:** a package that installs but cannot start, or starts without the feature the release
 was about, is the same failure in a quieter form; the container recipe proves both without a
 desktop machine.
