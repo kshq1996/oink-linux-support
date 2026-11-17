@@ -27,6 +27,12 @@ If SmartScreen says "Windows protected your PC", use **More info → Run anyway*
 
 The Linux packages install three programs: the tray application `oink`, the command line tool `oink-agent` and the background process `oink-backend`. The package declares its runtime dependencies (WebKitGTK 4.1, GTK 3, libayatana-appindicator3) and the version of the C library the binaries need, so the distribution package manager installs whatever is missing and refuses a system whose C library is too old.
 
+The package is unsigned. `dnf install` and `apt install` take an unsigned local package as it is, but zypper asks what to do with one and stops at the default answer, so install it with:
+
+```
+sudo zypper --no-gpg-checks install ./Oink-<version>-linux-<arch>.rpm
+```
+
 The Linux backends use X11: input capture and injection through XRecord and XTest, the clipboard through the X11 selection protocol and the display layout through XRandR. A Wayland session works through XWayland. The cursor trail overlay that macOS and Windows draw is not available on Linux.
 
 System audio is not available on Linux yet: playing another device's audio on this device and sharing the microphone need a native audio backend, which Linux does not have yet. Everything else — keyboard, mouse, trackpad, clipboard, display layout and device discovery — works.
