@@ -9,8 +9,8 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 export function auditPackage(packageRoot,platform,root = resolve(dirname(fileURLToPath(import.meta.url)),'..')) {
   const inventory=JSON.parse(readFileSync(join(root,'third-party-licenses.json'),'utf8'));
   const native=JSON.parse(readFileSync(join(root,'licenses/native-inventory.json'),'utf8'));
-  if (!['macos-arm64','macos-x64','windows-x64'].includes(platform)) throw Error('--platform must be macos-arm64, macos-x64 or windows-x64');
-  const attributionRoot=platform.startsWith('macos-') ? join(packageRoot,'Contents/Resources') : packageRoot;
+  if (!['macos-arm64','macos-x64','windows-x64','linux-x64','linux-arm64'].includes(platform)) throw Error('--platform must be macos-arm64, macos-x64, windows-x64, linux-x64 or linux-arm64');
+  const attributionRoot=platform.startsWith('macos-') ? join(packageRoot,'Contents/Resources') : platform.startsWith('linux-') ? join(packageRoot,'usr/share/doc/oink') : packageRoot;
   for (const path of ['third-party-licenses.json','THIRD_PARTY_LICENSES.md','NOTICE','LICENSE','LICENSE-ADDITIONAL-TERMS.md', ...new Set(inventory.components.flatMap(c=>c.licenseFiles.map(f=>f.path)))]) {
     const actual=join(attributionRoot,path);
     if (!existsSync(actual) || !readFileSync(actual).equals(readFileSync(join(root,path)))) throw Error(`Package attribution missing/different: ${path}`);

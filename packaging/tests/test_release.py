@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'build-support'))
 import public_release as R
 from provenance import digest
+import release_platforms
 
 COMMIT = 'a' * 40
 TREE = 'b' * 64
@@ -42,16 +43,21 @@ class PublicRelease(unittest.TestCase):
             R.release_build('4')
 
     def package(self, root, platform):
-        path = root / TREE / ('macos-arm64' if platform == 'macos' else platform if platform == 'macos-x64' else 'windows-x64')
+        path = root / TREE / ('macos-arm64' if platform == 'macos' else platform if platform == 'macos-x64' else 'windows-x64' if platform == 'windows' else platform)
         path.mkdir(parents=True)
-        name = 'Oink-0.1.0-' + ('macos-arm64.dmg' if platform == 'macos' else 'macos-x64.dmg' if platform == 'macos-x64' else 'windows-x64.msi')
-        f = path / name; f.write_bytes(platform.encode())
-        record = dict(architecture='x64' if platform == 'macos-x64' else 'arm64' if platform == 'macos' else 'x64', version='0.1.0', build=28, source_commit=None, source_tree_sha256=TREE,
+        architecture = 'x64' if platform in ('macos-x64', 'windows', 'linux-x64') else 'arm64'
+        if platform.startswith('linux'):
+            names = ['Oink-0.1.0-linux-' + architecture + suffix for suffix in ('.deb', '.rpm')]
+        else:
+            names = ['Oink-0.1.0-' + ('macos-arm64.dmg' if platform == 'macos' else 'macos-x64.dmg' if platform == 'macos-x64' else 'windows-x64.msi')]
+        for name in names:
+            (path / name).write_bytes(platform.encode())
+        record = dict(architecture=architecture, version='0.1.0', build=28, source_commit=None, source_tree_sha256=TREE,
             notarized=True, notarization={k:dict(status='Accepted',stapled=True) for k in ['app','dmg']},
             launch_smoke=dict(status='passed',signed=True,seconds=10),
-            artifacts=[dict(name=name,size=f.stat().st_size,sha256=digest(f))])
+            artifacts=[dict(name=name,size=(path/name).stat().st_size,sha256=digest(path/name)) for name in names])
         if platform.startswith('macos'):
-            archive = path / name.replace('.dmg', '.zip')
+            archive = path / names[0].replace('.dmg', '.zip')
             archive.write_bytes(b'Stapled Sparkle archive')
             record['artifacts'].append(dict(name=archive.name, size=archive.stat().st_size, sha256=digest(archive)))
         (path / 'release.json').write_text(json.dumps(record))
@@ -64,7 +70,7 @@ class PublicRelease(unittest.TestCase):
     def test_both_platforms_assemble_without_update_notes_and_with_package_hashes(self, _hash):
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)
-            for platform in ['macos','macos-x64','windows']:
+            for platform in ['macos','macos-x64','windows','linux-x64','linux-arm64']:
                 self.package(p/'packages'/platform,platform)
                 R.stage(p/'packages'/platform,p/'download'/platform,platform,28,COMMIT)
             # An empty working directory has no .github/update-notes.json.
@@ -74,12 +80,12 @@ class PublicRelease(unittest.TestCase):
                 assets=R.assemble(p/'download',p/'final',28,COMMIT)
             finally:
                 os.chdir(previous)
-            self.assertEqual({x.suffix for x in assets},{'.dmg','.zip','.msi','.json',''})
-            self.assertEqual(len(list((p/'final').iterdir())),7)
+            self.assertEqual({x.suffix for x in assets},{'.dmg','.zip','.msi','.deb','.rpm','.json',''})
+            self.assertEqual(len(list((p/'final').iterdir())),11)
             self.assertFalse((p/'final/update.json').exists())
             release=json.loads((p/'final/release.json').read_text())
             self.assertEqual({a['name'] for a in release['artifacts']},
-                             {a.name for a in assets if a.suffix in ('.dmg','.zip','.msi')})
+                             {a.name for a in assets if a.suffix in ('.dmg','.zip','.msi','.deb','.rpm')})
             self.assertNotIn('update.json', (p/'final/SHA256SUMS').read_text())
             for line in (p/'final/SHA256SUMS').read_text().splitlines():
                 sha,name=line.split('  ');self.assertEqual(sha,digest(p/'final'/name))
@@ -156,7 +162,20 @@ class WorkflowContract(unittest.TestCase):
     def test_workflow_contract_and_only_draft_can_write_contents(self):
         workflow=(ROOT/'.github/workflows/release.yml').read_text()
         self.assertEqual(workflow.count('contents: write'),1)
-        self.assertIn('  draft:\n    needs: package',workflow)
+        self.assertIn('  draft:\n    needs: [guard, package]',workflow)
+        # A push to the default branch publishes the manifest version once; the
+        # guard job skips the run when that version was released already.
+        self.assertIn('  guard:\n',workflow)
+        self.assertIn("needs.guard.outputs.publish == 'true'",workflow)
+        self.assertIn('gh release view "v$version"',workflow)
+        # The Linux packages are built in the project image, one job per CPU
+        # architecture, and staged with the same public release contract. The
+        # platform set names them once, so the matrix and the expected
+        # records cannot disagree.
+        self.assertIn('build-support/release_platforms.py',workflow)
+        self.assertIn('fromJson(needs.guard.outputs.matrix)',workflow)
+        self.assertIn('--platforms "${{ needs.guard.outputs.platforms }}"',workflow)
+        self.assertIn('tools/linux/release-package.sh',workflow)
         self.assertIn('--public-version',workflow)
         self.assertNotIn('inputs.build',workflow)
         self.assertEqual(workflow.count('--sequence "$SEQUENCE"'),3)
@@ -172,3 +191,9 @@ class WorkflowContract(unittest.TestCase):
         for filename in ['ci.yml', 'release.yml']:
             self.assertIn('cargo install cargo-about --version 0.9.2 --locked --features cli',
                           (ROOT / '.github/workflows' / filename).read_text())
+
+    def test_the_release_platform_set_names_the_packaged_platforms(self):
+        self.assertEqual(sorted(release_platforms.PLATFORMS), sorted(R.PACKAGE_SUFFIXES))
+        self.assertEqual(sorted(release_platforms.PLATFORMS), sorted(R.PACKAGE_ARCHITECTURE))
+        self.assertEqual(sorted(release_platforms.PLATFORMS), sorted(R.PACKAGE_DIRECTORIES))
+        self.assertEqual(release_platforms.DEFAULT, ['linux-x64', 'linux-arm64'])

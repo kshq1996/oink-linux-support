@@ -12,6 +12,25 @@ def unpack(data, fmt, offset):
         raise ValueError('Truncated native image') from error
 
 
+def elf_build_id(data, section_offset, section_size, section_count, string_index):
+    """The GNU build id note of an ELF image, or an empty value when absent."""
+    if not section_offset or not section_count:
+        return b''
+    names_at = section_offset + string_index * section_size
+    names, = unpack(data, 'Q', names_at + 24)
+    for index in range(section_count):
+        at = section_offset + index * section_size
+        name, kind = unpack(data, 'II', at)
+        offset, = unpack(data, 'Q', at + 24)
+        size, = unpack(data, 'Q', at + 32)
+        label = data[names + name:].split(b'\0', 1)[0]
+        if label != b'.note.gnu.build-id' or kind != 7:
+            continue
+        name_size, description_size, _ = unpack(data, 'III', offset)
+        start = offset + 12 + ((name_size + 3) & ~3)
+        return data[start:start + description_size]
+    return b''
+
 def image_identity(path):
     data = Path(path).read_bytes()
     debug_age, code_id = 0, None
@@ -68,6 +87,39 @@ def image_identity(path):
         if len(identifiers) != 1:
             raise ValueError('Expected one PE CodeView GUID')
         identifier = identifiers[0]
+    elif data[:4] == b'\x7fELF':
+        if data[4] != 2:
+            raise ValueError('Expected a 64-bit ELF image')
+        elf_type, machine = unpack(data, 'HH', 16)
+        if elf_type not in (2, 3):
+            raise ValueError('Expected an ELF executable or shared object')
+        if machine not in (0x3e, 0xb7):
+            raise ValueError('Expected an x86_64 or AArch64 ELF image')
+        program_offset, = unpack(data, 'Q', 32)
+        section_offset, = unpack(data, 'Q', 40)
+        program_size, program_count = unpack(data, 'HH', 54)
+        section_size, section_count, string_index = unpack(data, 'HHH', 58)
+        # The executable text range bounds an image-relative instruction
+        # offset: the highest executable segment address, measured from the
+        # lowest loaded address.
+        base, text_end = None, 0
+        for index in range(program_count):
+            at = program_offset + index * program_size
+            kind, flags = unpack(data, 'II', at)
+            address, = unpack(data, 'Q', at + 16)
+            memory, = unpack(data, 'Q', at + 40)
+            if kind != 1:
+                continue
+            base = address if base is None else min(base, address)
+            if flags & 1:
+                text_end = max(text_end, address + memory)
+        if base is None or text_end <= base:
+            raise ValueError('ELF image has no executable segment')
+        text_size = text_end - base
+        identifier = elf_build_id(data, section_offset, section_size, section_count, string_index)
+        if len(identifier) < 16:
+            raise ValueError('ELF build id is shorter than the manifest identity')
+        identifier = identifier[:16]
     else:
         raise ValueError('Unsupported native image')
     if not identifier or identifier == bytes(16) or not text_size:

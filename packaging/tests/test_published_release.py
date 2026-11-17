@@ -19,7 +19,9 @@ class PublishedFeedContract(unittest.TestCase):
     def test_release_published_event_triggers_no_workflow_or_feed_dispatch(self):
         workflow = (ROOT / '.github/workflows/release.yml').read_text()
         triggers = workflow.split('on:\n', 1)[1].split('permissions:\n', 1)[0]
-        self.assertEqual(re.findall(r'^  ([a-z_]+):', triggers, re.M), ['workflow_dispatch'])
+        # A published release event triggers nothing; a push to the default
+        # branch publishes the manifest version once, guarded by the release.
+        self.assertEqual(re.findall(r'^  ([a-z_]+):', triggers, re.M), ['workflow_dispatch', 'push'])
         self.assertNotIn('publish-updates:', workflow)
         self.assertNotIn('uses: ./.github/workflows/publish-', workflow)
         self.assertNotIn('gh workflow run', workflow)

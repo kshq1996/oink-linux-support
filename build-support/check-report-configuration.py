@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tarfile
 import time
 from public_release import locate
 
@@ -102,10 +103,39 @@ def windows_status(package, record):
         assert status['version_label']==env['EXPECTED_VERSION'] and status['ui_build']==str(record['build'])
 
 
+def linux_status(package, record, private):
+    """The Linux payload: the reporting configuration, the CLI and the manifest."""
+    deb = package / next(x['name'] for x in record['artifacts'] if x['name'].endswith('.deb'))
+    with tempfile.TemporaryDirectory(suffix='.noindex') as tmp:
+        # Inspect the shipped Debian package instead of a staging leftover.
+        listing = subprocess.run(['ar', 't', str(deb)], check=True, capture_output=True, text=True).stdout.split()
+        data = next(name for name in listing if name.startswith('data.tar'))
+        with subprocess.Popen(['ar', 'p', str(deb), data], stdout=subprocess.PIPE) as reader:
+            with tarfile.open(fileobj=reader.stdout, mode='r|gz' if data.endswith('.gz') else 'r|') as archive:
+                archive.extractall(tmp, filter='fully_trusted')
+        library = Path(tmp) / 'opt/oink'
+        # The agent and the backend report; the UI only drives the agent.
+        for name in ['oink-agent', 'oink-backend']:
+            assert private in (library / name).read_bytes()
+        manifest = json.loads((library / 'report-manifest.json').read_text())
+        assert manifest['version'] == {'major': int(record['version'].split('.')[0]),
+                                       'minor': int(record['version'].split('.')[1]),
+                                       'patch': int(record['version'].split('.')[2]),
+                                       'build': record['build']}
+        assert {image['slot'] for image in manifest['images']} == {'agent', 'ui_rust'}
+        assert all(len(image['debug_id']) == 16 for image in manifest['images'])
+        with tempfile.TemporaryDirectory() as home:
+            env = dict(os.environ, OINK_HOME=home, OINK_IPC_PORT='0')
+            for arg in ['--version', '--help']:
+                result = subprocess.check_output([str(library / 'oink-agent'), arg], env=env, text=True)
+                assert record['version'] in result if arg == '--version' else 'oink' in result.lower()
+            assert not list(Path(home).iterdir())
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--packages', type=Path, required=True)
-    p.add_argument('--platform', choices=['macos', 'windows'], required=True)
+    p.add_argument('--platform', choices=['macos', 'windows', 'linux-x64', 'linux-arm64'], required=True)
     a = p.parse_args(); path = locate(a.packages, a.platform); package = path.parent
     record = json.loads(path.read_text())
     private = os.environ.get('OINK_REPORT_DSN', '').encode()
@@ -151,6 +181,8 @@ def main():
                 assert digest(mount / 'Oink.app/Contents/MacOS/oink-backend') == record['launch_smoke']['backend_sha256']
             finally:
                 subprocess.run(['hdiutil', 'detach', str(mount)], check=True, capture_output=True)
+    elif a.platform.startswith('linux'):
+        linux_status(package, record, private)
     else:
         assert private in (package / 'payload/oink.exe').read_bytes()
         with tempfile.TemporaryDirectory() as home:

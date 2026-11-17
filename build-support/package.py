@@ -19,8 +19,8 @@ import package_notes
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--platform', choices=['macos', 'windows'], required=True)
-    p.add_argument('--arch', choices=['arm64', 'x64'], default='arm64', help='Mac package architecture')
+    p.add_argument('--platform', choices=['macos', 'windows', 'linux'], required=True)
+    p.add_argument('--arch', choices=['arm64', 'x64'], default='arm64', help='Package architecture (macOS and Linux)')
     p.add_argument('--output-root', type=Path, required=True)
     p.add_argument('--sequence', type=int, required=True, help='n of the packaged version: build = major*10^7 + minor*10^5 + patch*10^3 + n')
     p.add_argument('--windows-update-test-feed', help='TEST ONLY: compile a literal HTTP loopback feed and TEST public key')
@@ -48,9 +48,9 @@ def main():
         p.error(str(error))
     if a.windows_update_test_feed and (a.platform != 'windows' or a.public_version):
         p.error('test update feeds require a local Windows package, never --public-version')
-    expected = 'Darwin' if a.platform == 'macos' else 'Windows'
+    expected = {'macos': 'Darwin', 'windows': 'Windows', 'linux': 'Linux'}[a.platform]
     if platform.system() != expected or not supported_host(a.platform):
-        p.error('run on a Mac or x64 Windows build host for the selected platform')
+        p.error(f'run on a {expected} build host for the selected platform')
     a.output_root = a.output_root.resolve()
     if a.output_root.is_relative_to(ROOT):
         p.error('package output must be outside the source tree')
@@ -73,7 +73,7 @@ def main():
         p.error('build requires Rust 1.99.0, Node 24.14.1 and npm 11.11.0')
     inventory = json.loads(a.source_inventory.read_text())['files'] if a.source_inventory else source_inventory()
     tree = source_tree_sha256(ROOT, inventory)
-    output = a.output_root / tree / ('macos-' + a.arch if a.platform == 'macos' else 'windows-x64')
+    output = a.output_root / tree / ('windows-x64' if a.platform == 'windows' else a.platform + '-' + a.arch)
     output.mkdir(parents=True, exist_ok=True)
     if (output / 'release.json').exists():
         p.error('this source tree already has a package; choose a fresh output root for a rebuild')
@@ -87,7 +87,9 @@ def main():
         sys.path.insert(0, str(ROOT / 'packaging/macos'))
         from signing import select_identity
         a.signing_fingerprint = select_identity('893V37X2CW', a.signing_fingerprint)
-    target = ('aarch64-apple-darwin' if a.arch == 'arm64' else 'x86_64-apple-darwin') if macos else 'x86_64-pc-windows-msvc'
+    target = {'macos': 'aarch64-apple-darwin' if a.arch == 'arm64' else 'x86_64-apple-darwin',
+              'windows': 'x86_64-pc-windows-msvc',
+              'linux': 'aarch64-unknown-linux-gnu' if a.arch == 'arm64' else 'x86_64-unknown-linux-gnu'}[a.platform]
     common = ['--build', str(a.build), '--source-tree-sha256', tree]
     if commit:
         common += ['--source-commit', commit]
@@ -107,6 +109,8 @@ def main():
                             ('--notary-profile', a.notary_profile), ('--notary-keychain', a.notary_keychain)]:
             if value:
                 command += [flag, str(value)]
+    elif a.platform == 'linux':
+        command += ['--arch', a.arch, '--tool-cache', str(a.tool_cache)]
     else:
         command += ['--tool-cache', str(a.tool_cache)]
         if a.run_native_tests:
@@ -121,7 +125,9 @@ def main():
 
 
 def supported_host(selected):
-    return platform.machine().lower() in (('arm64', 'x86_64') if selected == 'macos' else ('amd64', 'x86_64'))
+    if selected == 'windows':
+        return platform.machine().lower() in ('amd64', 'x86_64')
+    return platform.machine().lower() in ('arm64', 'aarch64', 'x86_64', 'amd64')
 
 
 if __name__ == '__main__':

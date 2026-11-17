@@ -15,7 +15,26 @@ from update_qualification import origin as test_origin, verify_binaries
 
 ROOT = Path(__file__).resolve().parents[1]
 IDENTITY = json.loads((ROOT / 'packaging/identity.json').read_text())
-TARGETS = ('aarch64-apple-darwin', 'x86_64-pc-windows-msvc', 'x86_64-apple-darwin')
+TARGETS = ('aarch64-apple-darwin', 'x86_64-pc-windows-msvc', 'x86_64-apple-darwin',
+          'x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-gnu')
+
+
+def platform_of(target):
+    """The product platform a Rust target triple belongs to."""
+    if target.endswith('-apple-darwin'):
+        return 'macos'
+    if target.endswith('-pc-windows-msvc'):
+        return 'windows'
+    if target.endswith('-unknown-linux-gnu'):
+        return 'linux'
+    raise ValueError(f'unsupported target: {target}')
+
+
+def architecture_of(target):
+    """The release architecture name a Rust target triple belongs to."""
+    return {'aarch64-apple-darwin': 'arm64', 'x86_64-apple-darwin': 'x64',
+            'x86_64-pc-windows-msvc': 'x64', 'aarch64-unknown-linux-gnu': 'arm64',
+            'x86_64-unknown-linux-gnu': 'x64'}[target]
 
 
 def run(*args, **kwargs):
@@ -86,7 +105,8 @@ def main():
     environment['OINK_RELEASE_VERSION'] = display_version
     environment['OINK_SOURCE_COMMIT'] = a.source_commit or ''
     environment['OINK_SOURCE_TREE_SHA256'] = a.source_tree_sha256
-    environment['MACOSX_DEPLOYMENT_TARGET'] = IDENTITY['macos_minimum']
+    if platform_of(a.target) == 'macos':
+        environment['MACOSX_DEPLOYMENT_TARGET'] = IDENTITY['macos_minimum']
     if a.symbols_output:
         if a.symbols_output.resolve().is_relative_to(ROOT):
             p.error('private symbols must be outside the source tree')
@@ -101,10 +121,11 @@ def main():
     flags += [f'--remap-path-prefix={ROOT}=oink', f'--remap-path-prefix={cargo_home}=cargo']
     # Opus C assertions retain __FILE__ at runtime. Rust's path remapping does
     # not affect native C/C++; MSVC pathmap requires deterministic compilation.
-    native = [] if a.target.endswith('-apple-darwin') else ['/experimental:deterministic']
+    target_platform = platform_of(a.target)
+    native = ['/experimental:deterministic'] if target_platform == 'windows' else []
     for directory, logical in ((ROOT, 'oink'), (cargo_home, 'cargo')):
-        native.append(f'-ffile-prefix-map={directory}={logical}' if a.target.endswith('-apple-darwin')
-                      else f'/pathmap:{directory}={logical}')
+        native.append(f'/pathmap:{directory}={logical}' if target_platform == 'windows'
+                      else f'-ffile-prefix-map={directory}={logical}')
     environment['CC_SHELL_ESCAPED_FLAGS'] = '1'
     for name in ('CFLAGS', 'CXXFLAGS'):
         environment[name] = (environment.get(name, '') + ' ' + shlex.join(native)).strip()
@@ -117,7 +138,8 @@ def main():
     features = 'custom-protocol'
     if a.windows_update_test_feed:
         features += ',oink-winsvc/test-feed'
-    macos = a.target.endswith('-apple-darwin')
+    macos = target_platform == 'macos'
+    windows = target_platform == 'windows'
     if macos:
         # rustc must gather native objects while its LTO temporary directories
         # still exist; running dsymutil later loses their debug information.
@@ -145,16 +167,31 @@ def main():
     # every product package together so dependencies have one feature resolution.
     # A second cargo build without the UI used a smaller graph and recompiled
     # the backend and its dependencies. Keep Tauri's config/frontend preparation.
-    packages = ['-p', 'oink-ui', '-p', 'oink-agent', '-p', 'oink-crash']
-    if not macos:
+    packages = ['-p', 'oink-ui', '-p', 'oink-agent']
+    # The crash collector ships on macOS and Windows; Linux has no minidump
+    # collector, so its package stays out of the build.
+    if macos or windows:
+        packages += ['-p', 'oink-crash']
+    if windows:
         packages += ['-p', 'oink-winsvc']
     run(npm, 'run', '-w', 'apps/oink', 'tauri', '--', 'build', '--ci', '--no-bundle', '--no-sign',
         '--target', a.target, '--features', features, '--config', json.dumps(config), '--', '--locked', *packages,
         cwd=ROOT, env=environment)
-    roles = ['ui', 'agent', 'crash_collector', 'backend'] if macos else ['ui', 'agent', 'service', 'update_worker', 'crash_collector']
+    # macOS ships the backend inside the app bundle; Linux ships the same
+    # standalone binaries; Windows adds the input service and the update
+    # worker that the installer registers.
+    if macos:
+        roles = ['ui', 'agent', 'crash_collector', 'backend']
+    elif windows:
+        roles = ['ui', 'agent', 'service', 'update_worker', 'crash_collector']
+    else:
+        # Linux ships the UI, the backend and the CLI. The crash collector only
+        # captures Windows minidumps, and the input service and the update
+        # worker are Windows installers' roles.
+        roles = ['ui', 'agent', 'backend']
     output = Path(environment.get('CARGO_TARGET_DIR', ROOT / 'target')) / a.target / 'release'
-    names = [IDENTITY['binaries'][role] + ('' if macos else '.exe') for role in roles]
-    if not macos:
+    names = [IDENTITY['binaries'][role] + ('.exe' if windows else '') for role in roles]
+    if windows:
         from windows_credential_provider import build as build_credential_provider
         build_credential_provider(output, environment)
         names.append('OinkCredentialProvider.dll')
@@ -172,7 +209,8 @@ def main():
     verify_binaries([path for path in (ROOT / 'apps/oink/dist').rglob('*') if path.is_file()], a.windows_update_test_feed)
     record = dict(schema=1, provenance='source-tree', source_tree_sha256=a.source_tree_sha256,
                   version=display_version, source_commit=a.source_commit, build=a.build, target=a.target,
-                  updater_included=not macos, collector_included=True, worker_static_crt=not macos,
+                  platform=target_platform, architecture=architecture_of(a.target),
+                  updater_included=windows, collector_included=macos or windows, worker_static_crt=windows,
                   update_test_feed=a.windows_update_test_feed, update_test_fail_health=a.windows_update_test_fail_health,
                   identity_sha256=digest(ROOT / 'packaging/identity.json'),
                   files={name: digest(output / name) for name in names})

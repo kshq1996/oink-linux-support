@@ -78,7 +78,11 @@ for (const review of reviews) {
     if (hash(readFileSync(join(dirname(p.manifest_path),path))) !== sha) throw Error(`Reviewed source changed: ${p.name}/${path}`);
   }
 }
-const platforms = [['macos-arm64','aarch64-apple-darwin'],['macos-x64','x86_64-apple-darwin'],['windows-x64','x86_64-pc-windows-msvc']];
+const platforms = [['macos-arm64','aarch64-apple-darwin'],['macos-x64','x86_64-apple-darwin'],['windows-x64','x86_64-pc-windows-msvc'],['linux-x64','x86_64-unknown-linux-gnu'],['linux-arm64','aarch64-unknown-linux-gnu']];
+// The operating system and the processor each platform name, for the npm
+// packages that only publish for some of them.
+const platformOs={'macos-arm64':'darwin','macos-x64':'darwin','windows-x64':'win32','linux-x64':'linux','linux-arm64':'linux'};
+const platformCpu={'macos-arm64':'arm64','macos-x64':'x64','windows-x64':'x64','linux-x64':'x64','linux-arm64':'arm64'};
 const reachability = new Map();
 for (const [platform,target] of platforms) {
   const m = jsonFromRun(['metadata','--locked','--all-features','--format-version','1','--filter-platform',target]);
@@ -149,9 +153,20 @@ async function npmPackageDir(path,locked) {
   mkdirSync(dir,{recursive:true});
   if (!existsSync(archive)) {
     console.log(`Fetching optional package license: ${path}`);
-    const response=await fetch(locked.resolved,{signal:AbortSignal.timeout(60000)});
-    if (!response.ok) throw Error(`npm tarball HTTP ${response.status}: ${path}`);
-    writeFileSync(archive,Buffer.from(await response.arrayBuffer()));
+    // The registry serves these native bindings slowly and sometimes stalls
+    // mid-download. Retry the transfer instead of failing the whole run.
+    let bytes=null;
+    for (let attempt=1; attempt<=3 && !bytes; attempt+=1) {
+      try {
+        const response=await fetch(locked.resolved,{signal:AbortSignal.timeout(180000)});
+        if (!response.ok) throw Error(`npm tarball HTTP ${response.status}: ${path}`);
+        bytes=Buffer.from(await response.arrayBuffer());
+      } catch (error) {
+        if (attempt===3) throw error;
+        console.log(`Retrying ${path}: ${error.message}`);
+      }
+    }
+    writeFileSync(archive,bytes);
   }
   const [algorithm,digest]=locked.integrity.split('-');
   if (!['sha512','sha256','sha1'].includes(algorithm) || createHash(algorithm).update(readFileSync(archive)).digest('base64')!==digest) throw Error(`npm integrity mismatch: ${path}`);
@@ -204,7 +219,7 @@ for (const [path,locked] of Object.entries(npmLock.packages)) {
 components.push(...npmComponents.values());
 function npmPlatforms(p) {
   const matches=(list,value)=>!list || (!list.includes(`!${value}`) && (!list.some(x=>!x.startsWith('!')) || list.includes(value)));
-  return platforms.map(([platform])=>platform).filter(platform=>matches(p.os,platform.startsWith('macos-')?'darwin':'win32') && matches(p.cpu,platform==='macos-arm64'?'arm64':'x64'));
+  return platforms.map(([platform])=>platform).filter(platform=>matches(p.os,platformOs[platform]) && matches(p.cpu,platformCpu[platform]));
 }
 const native=json('licenses/native-inventory.json');
 for (const c of native.components) {

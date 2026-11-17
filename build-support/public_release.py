@@ -11,6 +11,31 @@ from identity import IDENTITY, encode_build
 from provenance import digest, source_tree_sha256
 
 
+# The packages each platform publishes, and the architecture its record names.
+PACKAGE_SUFFIXES = {
+    'macos': ('.dmg', '.zip'),
+    'macos-x64': ('.dmg', '.zip'),
+    'windows': ('.msi',),
+    'linux-x64': ('.deb', '.rpm'),
+    'linux-arm64': ('.deb', '.rpm'),
+}
+PACKAGE_ARCHITECTURE = {
+    'macos': 'arm64',
+    'macos-x64': 'x64',
+    'windows': 'x64',
+    'linux-x64': 'x64',
+    'linux-arm64': 'arm64',
+}
+PACKAGE_DIRECTORIES = {
+    'macos': 'macos-*',
+    'macos-x64': 'macos-x64',
+    'windows': 'windows-x64',
+    'linux-x64': 'linux-x64',
+    'linux-arm64': 'linux-arm64',
+}
+
+PLATFORM_NAMES = ['macos', 'macos-x64', 'windows', 'linux-x64', 'linux-arm64']
+
 def release_build(sequence):
     """The public release is build n of the manifest version (identity.encode_build)."""
     if not re.fullmatch(r'[1-9][0-9]{0,2}', sequence or ''):
@@ -35,7 +60,7 @@ def inputs(sequence, environment):
 
 
 def locate(packages, platform):
-    directory = 'macos-*' if platform == 'macos' else platform if platform == 'macos-x64' else 'windows-x64'
+    directory = PACKAGE_DIRECTORIES[platform]
     records = list(Path(packages).glob('*/' + directory + '/release.json'))
     if len(records) != 1:
         raise ValueError('expected one platform package record')
@@ -66,36 +91,36 @@ def stage(packages, output, platform, build, commit):
         source = path.parent / artifact['name']
         if Path(artifact['name']).name != artifact['name'] or digest(source) != artifact['sha256'] or source.stat().st_size != artifact['size']:
             raise ValueError('package artifact hash/size mismatch')
-        if source.suffix in ('.dmg', '.msi', '.zip'):
+        if source.suffix in ('.dmg', '.msi', '.zip', '.deb', '.rpm'):
             shutil.copy2(source, output / source.name)
-    record['artifacts'] = [a for a in record['artifacts'] if Path(a['name']).suffix in ('.dmg', '.msi', '.zip')]
-    if sorted(Path(a['name']).suffix for a in record['artifacts']) != (['.dmg', '.zip'] if platform.startswith('macos') else ['.msi']):
-        raise ValueError('expected Mac DMG + Sparkle ZIP, or Windows MSI')
+    record['artifacts'] = [a for a in record['artifacts'] if Path(a['name']).suffix in ('.dmg', '.msi', '.zip', '.deb', '.rpm')]
+    if sorted(Path(a['name']).suffix for a in record['artifacts']) != list(PACKAGE_SUFFIXES[platform]):
+        raise ValueError('unexpected package set for ' + platform)
     record.update(built_commit=commit, reporting=proof)
     (output / f'release-{"macos-x64" if platform.startswith("macos") and record.get("architecture") == "x64" else platform}.json').write_text(json.dumps(record, indent=2) + '\n')
 
 
-def assemble(downloads, output, build, commit):
+def assemble(downloads, output, build, commit, platforms=None):
     records = {}
     artifacts = []
     output.mkdir(parents=True, exist_ok=True)
-    for platform, suffix in [('macos', '.dmg'), ('macos-x64', '.dmg'), ('windows', '.msi')]:
+    for platform in (platforms or PLATFORM_NAMES):
         paths = list(downloads.rglob(f'release-{platform}.json'))
         if len(paths) != 1:
-            raise ValueError('both successful platform records required')
+            raise ValueError('every published platform needs one successful package record')
         path = paths[0]; record = json.loads(path.read_text(encoding='utf-8-sig'))
         if (record['version'], record['build'], record['built_commit'], record['source_tree_sha256']) != (IDENTITY['version'], build, commit, source_tree_sha256()):
             raise ValueError('platform packages do not share the built source/version/build')
-        expected_arch = 'arm64' if platform == 'macos' else 'x64'
+        expected_arch = PACKAGE_ARCHITECTURE[platform]
         if record.get('architecture') != expected_arch:
             raise ValueError('platform architecture mismatch')
         if platform.startswith('macos') and not record.get('notarized'):
             raise ValueError('Mac notarization missing')
         if record['reporting'] != {'configured': True, 'report_sent': False, 'version': record['version'], 'build': build}:
             raise ValueError('reporting check missing')
-        expected = ['.dmg', '.zip'] if platform.startswith('macos') else [suffix]
+        expected = list(PACKAGE_SUFFIXES[platform])
         if sorted(Path(a['name']).suffix for a in record['artifacts']) != expected:
-            raise ValueError('Mac DMG + ZIP and Windows MSI required')
+            raise ValueError('platform package set mismatch: ' + platform)
         for a in record['artifacts']:
             source = path.parent / a['name']
             if Path(a['name']).name != a['name'] or digest(source) != a['sha256'] or source.stat().st_size != a['size']:
@@ -134,7 +159,8 @@ def main():
     p.add_argument('--sequence', default=os.environ.get('SEQUENCE'), help='n of the manifest version; build = major*10^7 + minor*10^5 + patch*10^3 + n')
     p.add_argument('--commit', default=os.environ.get('GITHUB_SHA'))
     p.add_argument('--packages', type=Path)
-    p.add_argument('--platform', choices=['macos', 'windows'])
+    p.add_argument('--platform', choices=['macos', 'macos-x64', 'windows', 'linux-x64', 'linux-arm64'])
+    p.add_argument('--platforms', default='', help='Comma-separated platforms the release publishes; every one of them needs a package record.')
     p.add_argument('--output', type=Path)
     p.add_argument('--downloads', type=Path)
     p.add_argument('--notes', type=Path, default=Path('.github/release-notes.txt'))
@@ -148,7 +174,8 @@ def main():
     elif a.operation == 'stage':
         stage(a.packages, a.output, a.platform, release_build(a.sequence), a.commit)
     elif a.operation == 'assemble':
-        assemble(a.downloads, a.output, release_build(a.sequence), a.commit)
+        assemble(a.downloads, a.output, release_build(a.sequence), a.commit,
+                 [name.strip() for name in a.platforms.split(',') if name.strip()] or None)
     else:
         publish(a.output, a.commit, a.notes)
 
