@@ -1,10 +1,12 @@
-Oink 0.3.7 fixes the Linux `.rpm` package, which could not be installed on Fedora, openSUSE or RHEL.
+Oink 0.3.7 fixes the Linux packages: the `.rpm` file could not be installed on any RPM-based system, and the `.deb` file installed on a system whose C library was too old and then failed to start.
 
 ## Fixes
 
-- Fixed the Linux `.rpm` package failing to install. The package asked for a dependency called "or", because RPM reads "gtk3 or libgtk-3-0" as three separate package names, and it claimed the directories the system already owns, such as /usr and /usr/bin, so every installation ended in a missing dependency or a file conflict. The alternatives are now rich dependencies, and the package owns only the directories it creates itself. The `.deb` package was not affected.
-- The `.rpm` package now also installs on a distribution that only ships the legacy AppIndicator library, such as RHEL, because the tray icon falls back to it at runtime.
-- The README now explains how to install the package on an immutable system such as BazziteOS, where the root filesystem cannot be changed and the package has to be layered with `rpm-ostree`.
+- Fixed the Linux `.rpm` package failing to install. The package asked for a dependency called "or", because RPM reads "gtk3 or libgtk-3-0" as three separate package names, and it claimed the directories the system already owns, such as /usr and /usr/bin, so every installation ended in a missing dependency or a file conflict. The alternatives are now rich dependencies, and the package owns only the directories it creates itself.
+- The `.rpm` package now installs on openSUSE as well: the WebKitGTK, indicator and sound libraries have different names there than on Fedora, and the requirement now lists the names every distribution uses.
+- The `.rpm` package now installs on a distribution that only ships the legacy AppIndicator library, because the tray icon falls back to it at runtime.
+- The `.deb` package now states the C library version it needs. A system with an older C library refuses the installation with a clear message, instead of installing a program that cannot start.
+- The README now names the distributions the packages were verified on and explains how to install the package on an immutable system such as BazziteOS, where the root filesystem cannot be changed and the package has to be layered with `rpm-ostree`.
 
 ## Compatibility
 
