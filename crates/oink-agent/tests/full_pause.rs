@@ -84,7 +84,6 @@ async fn completed(node: &Node, request_id: &str, paused: bool) {
                 oink_agent::device_cards::DeviceControlReply::Accepted(_) => {
                     tokio::time::sleep(Duration::from_millis(10)).await;
                 }
-                other => panic!("unexpected pause reply: {other:?}"),
             }
         }
     })
