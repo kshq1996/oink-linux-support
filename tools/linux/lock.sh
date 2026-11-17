@@ -11,7 +11,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ARCH="${OINK_LINUX_ARCH:-amd64}"
-IMAGE="${OINK_LINUX_IMAGE_PREFIX:-oink-linux-build:0.3.7}-$ARCH"
+IMAGE="${OINK_LINUX_IMAGE_PREFIX:-oink-linux-build:0.3.6}-$ARCH"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
