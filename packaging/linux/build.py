@@ -49,9 +49,12 @@ DEBIAN_DEPENDS = ('libc6, libgtk-3-0, libwebkit2gtk-4.1-0, libayatana-appindicat
                    'libasound2t64 | libasound2')
 # RPM reads "a or b" as three separate package names, so the alternative
 # needs its own parentheses to become a rich dependency.
+# The tray icon library is loaded at runtime and the legacy indicator is
+# accepted as a fallback, so either package satisfies the dependency.
 RPM_REQUIRES = ('(gtk3 or libgtk-3-0)',
                 '(webkit2gtk4.1 or webkit2gtk-4.1)',
-                '(libayatana-appindicator or libayatana-appindicator3)',
+                '(libayatana-appindicator or libayatana-appindicator3 '
+                'or libappindicator-gtk3)',
                 'alsa-lib')
 DEBIAN_ARCHITECTURES = {'x64': 'amd64', 'arm64': 'arm64'}
 RPM_ARCHITECTURES = {'x64': 'x86_64', 'arm64': 'aarch64'}

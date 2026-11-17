@@ -178,6 +178,36 @@ class LinuxStaging(unittest.TestCase):
             if ' or ' in requirement:
                 self.assertTrue(requirement.startswith('(') and requirement.endswith(')'), requirement)
 
+    def test_the_built_rpm_states_rich_dependencies(self):
+        """The built package must not ask for a package called "or".
+
+        RPM parses the dependency list of the built package, so the
+        parentheses have to survive the round trip through the spec.
+        """
+        if shutil.which('rpmbuild') is None:
+            self.skipTest('rpmbuild is not installed')
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            payload, _ = self.stage(root)
+            name = B.build_rpm(payload, root, B.I['version'], 'x64')
+            requires = subprocess.check_output(['rpm', '-qp', '--requires', str(name)], text=True)
+        for line in requires.splitlines():
+            requirement = line.strip()
+            self.assertNotEqual(requirement, 'or')
+            if ' or ' in requirement:
+                self.assertTrue(requirement.startswith('(') and requirement.endswith(')'), requirement)
+
+    def test_rpm_indicator_dependency_accepts_the_legacy_package(self):
+        """A distribution that only ships the legacy indicator must install it.
+
+        The tray icon library is loaded at runtime and the legacy library is
+        accepted as a fallback, so the package may depend on either one.
+        """
+        indicator = [item for item in B.RPM_REQUIRES if 'appindicator' in item]
+        self.assertEqual(len(indicator), 1)
+        self.assertIn('libayatana-appindicator', indicator[0])
+        self.assertIn('libappindicator-gtk3', indicator[0])
+
     def test_rpm_does_not_own_the_shared_directories(self):
         """The package must not claim a directory another package owns.
 

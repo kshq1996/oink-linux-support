@@ -1,27 +1,14 @@
-Oink 0.3.6 is the first Linux release: Oink now runs on Linux desktops next to the existing Mac and Windows builds. It also improves automatic updates and fixes Oink becoming unresponsive on Windows after running in the background for a long time.
-
-## New
-
-- Oink now runs on Linux, for both x64 and arm64, as a `.deb` package for Debian, Ubuntu and Linux Mint and an `.rpm` package for Fedora, openSUSE and RHEL. Keyboard, mouse, trackpad, clipboard, display layout and device discovery work on Linux; system audio and the cursor trail overlay do not yet.
-- Reworked automatic updates.
-- On Mac, verification after dragging in the installer is faster.
-- The pointer event rate limit offers more levels to choose from.
-- New "Switch pointer position" shortcut: it moves the pointer to the next device in the online device list. It is off by default.
-- The device list shows devices in one order shared by the whole group, and you can drag online devices to reorder them.
-- When the shared microphone is muted or its volume is 0, the sending device stops capturing the microphone.
-- On Windows, the Oink background service writes its logs to files, which makes problems easier to investigate.
+Oink 0.3.7 fixes the Linux `.rpm` package, which could not be installed on Fedora, openSUSE or RHEL.
 
 ## Fixes
 
-- Fixed the Oink background on Windows no longer responding after being idle for a long time, which made the device list, speakers and microphones unavailable.
-- Fixed uninstalling failing on Windows (#46).
-- Fixed moving the mouse briefly entering game mode on Windows while a full-screen program hides the pointer.
-- Fixed "Disable hidden displays in the system" on Windows taking effect only after the layout changed or Oink restarted.
-- Fixed Windows always asking for a restart after installing or uninstalling the virtual microphone. It now asks only when a restart is really needed, and uninstalling Oink also asks when one is needed.
+- Fixed the Linux `.rpm` package failing to install. The package asked for a dependency called "or", because RPM reads "gtk3 or libgtk-3-0" as three separate package names, and it claimed the directories the system already owns, such as /usr and /usr/bin, so every installation ended in a missing dependency or a file conflict. The alternatives are now rich dependencies, and the package owns only the directories it creates itself. The `.deb` package was not affected.
+- The `.rpm` package now also installs on a distribution that only ships the legacy AppIndicator library, such as RHEL, because the tray icon falls back to it at runtime.
+- The README now explains how to install the package on an immutable system such as BazziteOS, where the root filesystem cannot be changed and the package has to be layered with `rpm-ostree`.
 
 ## Compatibility
 
-- 0.3.6 works with 0.3.0 and later.
+- 0.3.7 works with 0.3.0 and later.
 
 ## Downloads
 
