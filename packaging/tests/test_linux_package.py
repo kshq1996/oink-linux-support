@@ -132,6 +132,33 @@ class LinuxStaging(unittest.TestCase):
             self.assertIn(f'./{B.INSTALL_DIRECTORY}/{B.I["binaries"]["backend"]}', data)
             self.assertIn(f'./{B.APPLICATIONS_DIRECTORY}/com.hachiwii.oink.desktop', data)
 
+    def test_debian_package_states_the_c_library_it_needs(self):
+        """A package that installs on an older system but cannot run is worse.
+
+        The binaries are linked against the C library of the image they were
+        built in, so the package states the version it needs and the package
+        manager refuses to install it where the library is older.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            payload, _ = self.stage(root)
+            name = B.build_deb(payload, root, B.I['version'], 'x64')
+            members = ar_members(name.read_bytes())
+            with tarfile.open(fileobj=io.BytesIO(gzip.decompress(members['control.tar.gz'])), mode='r:') as archive:
+                text = archive.extractfile('./control').read().decode()
+        depends = next(line for line in text.splitlines() if line.startswith('Depends: '))
+        self.assertRegex(depends, r'libc6 \(>= \d+\.\d+\)')
+
+    def test_the_c_library_version_is_read_from_the_binaries(self):
+        """The requirement follows the build instead of a remembered number."""
+        output = ('  0x0020:   rev: 1  Flags: BASE  Index: 1  Cnt: 2  Name: GLIBC_2.39\n'
+                  '  0x0038:   rev: 1  Flags: BASE  Index: 2  Cnt: 2  Name: GLIBC_2.34\n'
+                  '  0x0050:   rev: 1  Flags: BASE  Index: 3  Cnt: 2  Name: GLIBC_2.2.5\n'
+                  '  0x0060:   rev: 1  Flags: BASE  Index: 4  Cnt: 2  Name: GLIBC_PRIVATE\n')
+        versions = B.glibc_versions(output)
+        self.assertEqual(versions, {'2.39', '2.34', '2.2.5'})
+        self.assertEqual(B.newest_glibc(versions), '2.39')
+
     def test_debian_package_keeps_directories_and_symlinks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -197,16 +224,24 @@ class LinuxStaging(unittest.TestCase):
             if ' or ' in requirement:
                 self.assertTrue(requirement.startswith('(') and requirement.endswith(')'), requirement)
 
-    def test_rpm_indicator_dependency_accepts_the_legacy_package(self):
-        """A distribution that only ships the legacy indicator must install it.
+    def test_rpm_dependencies_cover_every_supported_distribution(self):
+        """Each RPM distribution the release claims to support has its names.
 
-        The tray icon library is loaded at runtime and the legacy library is
-        accepted as a fallback, so the package may depend on either one.
+        The package names differ per distribution, and a requirement that
+        names a package no distribution has cannot be installed anywhere.
+        The legacy indicator is listed as well: the tray icon library is
+        loaded at runtime and falls back to it.
         """
-        indicator = [item for item in B.RPM_REQUIRES if 'appindicator' in item]
-        self.assertEqual(len(indicator), 1)
-        self.assertIn('libayatana-appindicator', indicator[0])
-        self.assertIn('libappindicator-gtk3', indicator[0])
+        names = {
+            'fedora': ('gtk3', 'webkit2gtk4.1', 'libayatana-appindicator-gtk3', 'alsa-lib'),
+            'opensuse': ('libgtk-3-0', 'libwebkit2gtk-4_1-0', 'libayatana-appindicator3-1',
+                         'libasound2'),
+            'rhel': ('gtk3', 'webkit2gtk4.1', 'libappindicator-gtk3', 'alsa-lib'),
+        }
+        for distribution, packages in names.items():
+            for package in packages:
+                self.assertTrue(any(package in requirement for requirement in B.RPM_REQUIRES),
+                                f'{distribution} package {package} is not required')
 
     def test_rpm_does_not_own_the_shared_directories(self):
         """The package must not claim a directory another package owns.

@@ -13,7 +13,9 @@ their dependency names, not in their contents.
 import argparse
 import hashlib
 import json
+import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
@@ -43,19 +45,64 @@ def host_path(root, relative):
     return root.joinpath(*relative.parts)
 
 
-# The dependency names differ between the two distribution families, and the
-# RPM names differ between Fedora/RHEL and openSUSE as well.
-DEBIAN_DEPENDS = ('libc6, libgtk-3-0, libwebkit2gtk-4.1-0, libayatana-appindicator3-1, '
-                   'libasound2t64 | libasound2')
-# RPM reads "a or b" as three separate package names, so the alternative
-# needs its own parentheses to become a rich dependency.
-# The tray icon library is loaded at runtime and the legacy indicator is
-# accepted as a fallback, so either package satisfies the dependency.
+# The runtime dependencies of the Debian package. The C library carries a
+# version: the binaries are linked against the library of the image they were
+# built in, so the package states the version it needs. A package that
+# installs on an older system and then fails to start is worse than one the
+# package manager refuses.
+GLIBC_MINIMUM = '2.39'
+
+
+def debian_depends(glibc):
+    """The runtime dependencies of the Debian package."""
+    return (f'libc6 (>= {glibc}), libgtk-3-0, libwebkit2gtk-4.1-0, '
+            'libayatana-appindicator3-1, libasound2t64 | libasound2')
+
+
+def glibc_versions(output):
+    """The C library versions a binary names, from the readelf output."""
+    return set(re.findall(r'GLIBC_(\d+(?:\.\d+)*)', output))
+
+
+def newest_glibc(versions):
+    """The newest of the C library versions."""
+    return max(versions, key=lambda value: tuple(int(part) for part in value.split('.')))
+
+
+def glibc_minimum(binaries):
+    """The oldest C library the packaged binaries run on.
+
+    The binaries name the library versions they need, so the requirement
+    follows the build instead of a number that has to be remembered.
+    """
+    versions = set()
+    for role in ('ui', 'agent', 'backend'):
+        binary = binaries / I['binaries'][role]
+        try:
+            output = subprocess.run(['readelf', '--version-info', str(binary)],
+                                    check=True, capture_output=True, text=True).stdout
+        except (OSError, subprocess.CalledProcessError):
+            return GLIBC_MINIMUM
+        versions.update(glibc_versions(output))
+    if not versions:
+        return GLIBC_MINIMUM
+    return newest_glibc(versions)
+
+
+# The RPM dependency names differ between the RPM distributions: openSUSE
+# calls the WebKitGTK and the indicator library differently, and it names the
+# ALSA library libasound2. RPM reads "a or b" as three separate package
+# names, so every alternative needs its own parentheses to become a rich
+# dependency. The tray icon library is loaded at runtime and the legacy
+# indicator is accepted as a fallback, so either indicator package satisfies
+# the dependency.
+
 RPM_REQUIRES = ('(gtk3 or libgtk-3-0)',
-                '(webkit2gtk4.1 or webkit2gtk-4.1)',
-                '(libayatana-appindicator or libayatana-appindicator3 '
-                'or libappindicator-gtk3)',
-                'alsa-lib')
+                '(webkit2gtk4.1 or webkit2gtk-4.1 or libwebkit2gtk-4_1-0)',
+                '(libayatana-appindicator-gtk3 or libayatana-appindicator or '
+                'libayatana-appindicator3 or libayatana-appindicator3-1 or '
+                'libappindicator-gtk3)',
+                '(alsa-lib or libasound2)')
 DEBIAN_ARCHITECTURES = {'x64': 'amd64', 'arm64': 'arm64'}
 RPM_ARCHITECTURES = {'x64': 'x86_64', 'arm64': 'aarch64'}
 SUMMARY = 'Share keyboard, mouse and clipboard between your computers'
@@ -134,7 +181,7 @@ def rpm_version(version):
     return base, suffix or '1'
 
 
-def debian_control(version, arch):
+def debian_control(version, arch, glibc=GLIBC_MINIMUM):
     """The control file of the Debian package."""
     return '\n'.join([
         'Package: oink',
@@ -144,7 +191,7 @@ def debian_control(version, arch):
         'Section: utils',
         'Priority: optional',
         'Homepage: https://github.com/oinkvm/oink',
-        f'Depends: {DEBIAN_DEPENDS}',
+        f'Depends: {debian_depends(glibc)}',
         f'Description: {SUMMARY}',
         ' ' + DESCRIPTION.replace('\n', '\n '),
         ''])
@@ -161,10 +208,10 @@ def debian_md5sums(root):
     return '\n'.join(lines) + '\n'
 
 
-def build_deb(root, output, version, arch):
+def build_deb(root, output, version, arch, glibc=GLIBC_MINIMUM):
     """Write the Debian package for the staged tree."""
     name = output / f'{artifact_stem(version, "linux", arch)}.deb'
-    return build_deb_package(root, name, debian_control(version, arch), debian_md5sums(root))
+    return build_deb_package(root, name, debian_control(version, arch, glibc), debian_md5sums(root))
 
 
 def build_rpm(root, output, version, arch):
@@ -206,7 +253,7 @@ def main():
     # Both packages are written from the same staging tree; neither writer
     # changes the tree, so the order only decides which file is listed first.
     rpm = build_rpm(payload, a.output, a.version, a.arch)
-    deb = build_deb(payload, a.output, a.version, a.arch)
+    deb = build_deb(payload, a.output, a.version, a.arch, glibc_minimum(a.binaries))
     record['artifacts'] = [{'name': f.name, 'size': f.stat().st_size, 'sha256': digest(f)} for f in (deb, rpm)]
     (a.output / 'release.json').write_text(json.dumps(record, indent=2) + '\n')
     (a.output / 'SHA256SUMS').write_text(''.join(f"{f['sha256']}  {f['name']}\n" for f in record['artifacts']))

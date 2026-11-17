@@ -19,13 +19,13 @@ Supported operating systems and versions:
 
 - **Mac:** Apple silicon (arm64), macOS 14.2+; Intel (x64), macOS 14.2+ (untested)
 - **Windows:** x64, Windows 10 version 1809 (build 17763) or later, or Windows 11. Windows 10 versions before 22H2 are untested. Windows 10 LTSC (such as LTSC 2019 / LTSC 2021) does not include the WebView2 Runtime; install the Microsoft Edge WebView2 Runtime (Evergreen) first: https://developer.microsoft.com/microsoft-edge/webview2/
-- **Linux:** x64 and arm64, in a desktop session with X11 (or XWayland). Install the `.deb` package on Debian, Ubuntu and Linux Mint, or the `.rpm` package on Fedora, openSUSE and RHEL.
+- **Linux:** x64 and arm64, in a desktop session with X11 (or XWayland). The packages are built on Ubuntu 24.04 and need glibc 2.39 or newer. Install the `.deb` package on Debian 13 or newer, Ubuntu 24.04 or newer and Linux Mint 22 or newer, or the `.rpm` package on Fedora 40 or newer and openSUSE Tumbleweed.
 
 If SmartScreen says "Windows protected your PC", use **More info → Run anyway** only if offered. UAC may show an unknown publisher.
 
 ### Linux
 
-The Linux packages install three programs: the tray application `oink`, the command line tool `oink-agent` and the background process `oink-backend`. The package declares its runtime dependencies (WebKitGTK 4.1, GTK 3, libayatana-appindicator3), so the distribution package manager installs whatever is missing.
+The Linux packages install three programs: the tray application `oink`, the command line tool `oink-agent` and the background process `oink-backend`. The package declares its runtime dependencies (WebKitGTK 4.1, GTK 3, libayatana-appindicator3) and the version of the C library the binaries need, so the distribution package manager installs whatever is missing and refuses a system whose C library is too old.
 
 The Linux backends use X11: input capture and injection through XRecord and XTest, the clipboard through the X11 selection protocol and the display layout through XRandR. A Wayland session works through XWayland. The cursor trail overlay that macOS and Windows draw is not available on Linux.
 
