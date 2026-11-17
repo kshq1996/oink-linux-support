@@ -356,8 +356,11 @@ impl InputBackend for LinuxInput {
     }
 
     fn system_cursor_clip(&self) -> Result<Option<Rect>, InputError> {
-        let (width, height) = root_size(&self.inner);
-        Ok(Some(Rect::new(0.0, 0.0, f64::from(width), f64::from(height))))
+        // X11 没有应用级的指针禁区：指针只受根窗口的像素边界限制，那不是
+        // 「系统把指针关在某个矩形里」。报告根窗口会让路由把整块屏幕当成
+        // 一个禁区，于是屏幕边沿永远到不了（接管别的设备就不会触发），
+        // 远端送来的移动也会被夹回屏幕里。
+        Ok(None)
     }
 
     fn feel_profile(&self) -> FeelProfile {
@@ -379,5 +382,29 @@ impl InputBackend for LinuxInput {
             input_monitoring: PermissionState::NotApplicable,
             secure_input_active: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// X11 没有应用级的指针禁区：根窗口不是禁区。
+    ///
+    /// 需要真的 X 服务器：容器里的测试脚本会起一个 Xvfb。
+    #[test]
+    fn the_pointer_is_not_confined_to_a_region() {
+        if std::env::var_os("DISPLAY").is_none() {
+            // 没有 X 会话就没有指针。
+            return;
+        }
+        let Ok(backend) = backend() else {
+            return;
+        };
+        assert_eq!(
+            backend.system_cursor_clip().expect("指针禁区"),
+            None,
+            "X11 上没有应用级的指针禁区"
+        );
     }
 }
