@@ -85,6 +85,12 @@ RUN apt-get update \
  && apt-get install --no-install-recommends -y rpm \
  && rm -rf /var/lib/apt/lists/*
 
+# The licence inventory needs cargo-about, the same version and features the
+# release workflow pins. Installing it here keeps every run, in CI and on a
+# developer machine, on one toolchain.
+RUN cargo install cargo-about --version 0.9.2 --locked --features cli \
+ && chmod -R a+w "$CARGO_HOME"
+
 COPY entrypoint.sh /usr/local/bin/linux-entrypoint.sh
 RUN chmod 0755 /usr/local/bin/linux-entrypoint.sh
 WORKDIR /src
