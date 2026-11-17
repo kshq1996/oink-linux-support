@@ -11,7 +11,8 @@
 //!   文件在但被关掉就是「需要用户重新允许」，文件不在就是「未注册」。
 //! - **没有统一的设置页**：Linux 上没有一个跨桌面通用的「登录项」设置页，
 //!   [`open_system_settings`] 因此返回 `unsupported_platform`，不去猜一个可能不存在的命令。
-//! - 只有界面程序（可执行文件名 `oink`）能登记登录项；命令行工具与后台进程不行。
+//! - 登录项登记的永远是**界面程序**（可执行文件名 `oink`）。Linux 包把界面程序、命令行工具
+//!   和后台进程放在同一个目录里，所以后台进程（替界面登记登录项的那个）能在自己旁边找到它。
 
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
@@ -34,14 +35,23 @@ fn describe(operation: &str, error: io::Error) -> String {
     "login_item_system_unavailable".into()
 }
 
-/// 当前程序的路径；不是界面程序时返回给用户看的原因。
+/// 当前程序旁边的界面程序；找不到时返回给用户看的原因。
 fn ui_exe() -> Result<PathBuf, LaunchAtLoginProblem> {
     let exe = std::env::current_exe().map_err(|_| LaunchAtLoginProblem::SystemUnavailable)?;
-    let is_ui = exe.file_name().is_some_and(|name| name.to_string_lossy() == UI_EXE);
-    if is_ui {
-        Ok(exe)
-    } else {
-        Err(LaunchAtLoginProblem::MainAppRequired)
+    ui_exe_next_to(&exe)
+}
+
+/// 界面程序的可执行文件：当前进程就是它，或者它在当前程序的同目录里。
+fn ui_exe_next_to(exe: &Path) -> Result<PathBuf, LaunchAtLoginProblem> {
+    if exe.file_name().is_some_and(|name| name.to_string_lossy() == UI_EXE) {
+        return Ok(exe.to_path_buf());
+    }
+    // Linux 包把界面程序、命令行工具与后台进程装在同一个目录里：后台进程
+    // 处理界面发来的登录项请求，它登记的仍然是旁边的界面程序。
+    let sibling = exe.parent().map(|directory| directory.join(UI_EXE));
+    match sibling {
+        Some(path) if path.is_file() => Ok(path),
+        _ => Err(LaunchAtLoginProblem::MainAppRequired),
     }
 }
 
@@ -526,5 +536,23 @@ mod tests {
     #[test]
     fn the_settings_page_is_not_supported_on_linux() {
         assert_eq!(open_system_settings().unwrap_err(), "unsupported_platform");
+    }
+
+    #[test]
+    fn the_login_item_points_at_the_ui_next_to_the_backend() {
+        let directory = TempDir::new("sibling");
+        let ui = directory.path().join(UI_EXE);
+        fs::write(&ui, b"").expect("the ui executable");
+        // The interface program registers itself.
+        assert_eq!(ui_exe_next_to(&ui).expect("the ui itself"), ui);
+        // The backend sits next to it and registers that one.
+        let backend = directory.path().join("oink-backend");
+        assert_eq!(ui_exe_next_to(&backend).expect("the sibling ui"), ui);
+        // Without an interface program there is nothing to register.
+        let alone = TempDir::new("alone");
+        assert_eq!(
+            ui_exe_next_to(&alone.path().join("oink-agent")).unwrap_err(),
+            LaunchAtLoginProblem::MainAppRequired
+        );
     }
 }
