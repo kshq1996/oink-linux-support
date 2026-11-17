@@ -114,9 +114,11 @@ def linux_status(package, record, private):
             with tarfile.open(fileobj=reader.stdout, mode='r|gz' if data.endswith('.gz') else 'r|') as archive:
                 archive.extractall(tmp, filter='fully_trusted')
         library = Path(tmp) / 'opt/oink'
-        # The agent and the backend report; the UI only drives the agent.
+        # The agent and the backend report; the UI only drives the agent. A
+        # build without a DSN has no reporting configuration to find.
         for name in ['oink-agent', 'oink-backend']:
-            assert private in (library / name).read_bytes()
+            if private:
+                assert private in (library / name).read_bytes()
         manifest = json.loads((library / 'report-manifest.json').read_text())
         assert manifest['version'] == {'major': int(record['version'].split('.')[0]),
                                        'minor': int(record['version'].split('.')[1]),
@@ -139,7 +141,7 @@ def main():
     a = p.parse_args(); path = locate(a.packages, a.platform); package = path.parent
     record = json.loads(path.read_text())
     private = os.environ.get('OINK_REPORT_DSN', '').encode()
-    if not private:
+    if not private and not a.platform.startswith('linux'):
         raise RuntimeError('reporting build configuration required')
     if a.platform == 'macos':
         sys.path.insert(0, str(ROOT / 'packaging/macos'))
@@ -192,8 +194,8 @@ def main():
                 assert record['version'] in result if arg == '--version' else 'oink' in result.lower()
             assert not list(Path(home).iterdir())
         windows_status(package, record)
-    (package / 'report-configuration-check.json').write_text(json.dumps({'configured': True, 'report_sent': False, 'version': record['version'], 'build': record['build']}) + '\n')
-    print('PASS: production version/reporting configuration, no report sent')
+    (package / 'report-configuration-check.json').write_text(json.dumps({'configured': bool(private), 'report_sent': False, 'version': record['version'], 'build': record['build']}) + '\n')
+    print('PASS: production version/reporting configuration (%s), no report sent' % ('configured' if private else 'absent'))
 
 
 if __name__ == '__main__':

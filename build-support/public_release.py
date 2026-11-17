@@ -36,6 +36,18 @@ PACKAGE_DIRECTORIES = {
 
 PLATFORM_NAMES = ['macos', 'macos-x64', 'windows', 'linux-x64', 'linux-arm64']
 
+# The platforms whose release needs the upstream reporting configuration. The
+# Linux packages build without a DSN, so a fork can publish them on its own.
+REPORTING_REQUIRED = ('macos', 'macos-x64', 'windows')
+
+# The Linux packages build without a DSN, so a fork can publish them on its own.
+REPORTING_OPTIONAL = ('linux-x64', 'linux-arm64')
+
+def reporting_proofs(version, build):
+    """The reporting proofs a package record may carry."""
+    base = {'report_sent': False, 'version': version, 'build': build}
+    return [{**base, 'configured': True}, {**base, 'configured': False}]
+
 def release_build(sequence):
     """The public release is build n of the manifest version (identity.encode_build)."""
     if not re.fullmatch(r'[1-9][0-9]{0,2}', sequence or ''):
@@ -45,11 +57,13 @@ def release_build(sequence):
     return encode_build(IDENTITY['version'], int(sequence))
 
 
-def inputs(sequence, environment):
+def inputs(sequence, environment, platform=''):
     release_build(sequence)
+    dsn = environment.get('OINK_REPORT_DSN', '')
     # Mirrors Endpoint::parse; reject an inert release without exposing its DSN.
-    if not re.fullmatch(r'https://[a-fA-F0-9]{32}@o[0-9]+\.ingest\.de\.sentry\.io/[0-9]+', environment.get('OINK_REPORT_DSN', '')):
-        raise ValueError('OINK_REPORT_DSN must be the EU reporting DSN')
+    if dsn or platform not in REPORTING_OPTIONAL:
+        if not re.fullmatch(r'https://[a-fA-F0-9]{32}@o[0-9]+\.ingest\.de\.sentry\.io/[0-9]+', dsn):
+            raise ValueError('OINK_REPORT_DSN must be the EU reporting DSN')
     if environment.get('OINK_REPORT_REGION') != 'eu':
         raise ValueError('OINK_REPORT_REGION must be eu')
     names = ['SIGNPATH_API_TOKEN', 'SIGNPATH_ORGANIZATION_ID', 'SIGNPATH_PROJECT_SLUG']
@@ -79,8 +93,10 @@ def stage(packages, output, platform, build, commit):
     if not isinstance(commit, str) or not re.fullmatch('[0-9a-f]{40}', commit):
         raise ValueError('full built commit required')
     proof = json.loads((path.parent / 'report-configuration-check.json').read_text())
-    if proof != {'configured': True, 'report_sent': False, 'version': record['version'], 'build': build}:
+    if proof not in reporting_proofs(record['version'], build):
         raise ValueError('production reporting/version verification missing')
+    if not proof['configured'] and platform not in REPORTING_OPTIONAL:
+        raise ValueError('reporting configuration required')
     if platform.startswith('macos'):
         if not record.get('notarized') or not all(record['notarization'][k].get('stapled') and record['notarization'][k]['status'] == 'Accepted' for k in ['app', 'dmg']):
             raise ValueError('app and DMG must be Accepted and stapled')
@@ -116,8 +132,10 @@ def assemble(downloads, output, build, commit, platforms=None):
             raise ValueError('platform architecture mismatch')
         if platform.startswith('macos') and not record.get('notarized'):
             raise ValueError('Mac notarization missing')
-        if record['reporting'] != {'configured': True, 'report_sent': False, 'version': record['version'], 'build': build}:
+        if record['reporting'] not in reporting_proofs(record['version'], build):
             raise ValueError('reporting check missing')
+        if not record['reporting']['configured'] and platform not in REPORTING_OPTIONAL:
+            raise ValueError('reporting configuration required')
         expected = list(PACKAGE_SUFFIXES[platform])
         if sorted(Path(a['name']).suffix for a in record['artifacts']) != expected:
             raise ValueError('platform package set mismatch: ' + platform)
@@ -166,7 +184,7 @@ def main():
     p.add_argument('--notes', type=Path, default=Path('.github/release-notes.txt'))
     a = p.parse_args()
     if a.operation == 'inputs':
-        enabled = inputs(a.sequence, os.environ)
+        enabled = inputs(a.sequence, os.environ, a.platform or '')
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             f.write('sign_windows=' + str(enabled).lower() + '\n')
     elif a.operation == 'locate':

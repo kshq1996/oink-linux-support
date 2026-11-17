@@ -110,7 +110,7 @@ jobs:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
           SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
           SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-        run: python build-support/public_release.py inputs
+        run: python build-support/public_release.py inputs --platform "${{ matrix.release || matrix.platform }}"
       - name: Check native installer policy before product compilation
         if: runner.os == 'Windows'
         shell: pwsh

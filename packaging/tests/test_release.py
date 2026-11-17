@@ -34,6 +34,29 @@ class PublicRelease(unittest.TestCase):
             with self.assertRaises(ValueError): R.inputs('28', {**env, **change})
         self.assertTrue(R.inputs('28', {**env, 'SIGNPATH_PROJECT_SLUG':'x', 'SIGNPATH_ORGANIZATION_ID':'x', 'SIGNPATH_API_TOKEN':'fixture'}))
 
+    def test_linux_release_needs_no_reporting_dsn(self):
+        env = dict(OINK_REPORT_REGION='eu')
+        self.assertFalse(R.inputs('28', env, 'linux-x64'))
+        self.assertFalse(R.inputs('28', env, 'linux-arm64'))
+        with self.assertRaises(ValueError):
+            R.inputs('28', env, 'windows')
+        with self.assertRaises(ValueError):
+            R.inputs('28', {**env, 'OINK_REPORT_DSN': 'not-a-dsn'}, 'linux-x64')
+
+    @patch.object(R, 'source_tree_sha256', return_value=TREE)
+    def test_linux_package_without_reporting_is_staged(self, _hash):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            proof = dict(configured=False, report_sent=False, version='0.1.0', build=28)
+            directory, record = self.package(p/'packages', 'linux-x64')
+            (directory/'report-configuration-check.json').write_text(json.dumps(proof))
+            R.stage(p/'packages', p/'out', 'linux-x64', 28, COMMIT)
+            # A platform that ships the upstream reporting configuration does not accept a package without one.
+            directory, record = self.package(p/'windows', 'windows')
+            (directory/'report-configuration-check.json').write_text(json.dumps(proof))
+            with self.assertRaisesRegex(ValueError, 'reporting'):
+                R.stage(p/'windows', p/'out-windows', 'windows', 28, COMMIT)
+
     def test_release_build_is_the_sequence_of_the_stable_manifest_version(self):
         self.assertEqual(R.release_build('28'), 100028)
         self.assertEqual(R.release_build('999'), 100999)
