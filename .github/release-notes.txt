@@ -1,4 +1,15 @@
-Oink 0.3.7 fixes the Linux packages: the `.rpm` file could not be installed on any RPM-based system, and the `.deb` file installed on a system whose C library was too old and then failed to start.
+Oink 0.3.6 is the first Linux release: Oink now runs on Linux desktops next to the existing Mac and Windows builds. It also improves automatic updates and fixes Oink becoming unresponsive on Windows after running in the background for a long time.
+
+## New
+
+- Oink now runs on Linux, for both x64 and arm64, as a `.deb` package for Debian, Ubuntu and Linux Mint and an `.rpm` package for Fedora, openSUSE and RHEL. Keyboard, mouse, trackpad, clipboard, display layout and device discovery work on Linux; system audio and the cursor trail overlay do not yet.
+- Reworked automatic updates.
+- On Mac, verification after dragging in the installer is faster.
+- The pointer event rate limit offers more levels to choose from.
+- New "Switch pointer position" shortcut: it moves the pointer to the next device in the online device list. It is off by default.
+- The device list shows devices in one order shared by the whole group, and you can drag online devices to reorder them.
+- When the shared microphone is muted or its volume is 0, the sending device stops capturing the microphone.
+- On Windows, the Oink background service writes its logs to files, which makes problems easier to investigate.
 
 ## Fixes
 
@@ -7,12 +18,19 @@ Oink 0.3.7 fixes the Linux packages: the `.rpm` file could not be installed on a
 - The `.rpm` package now installs on a distribution that only ships the legacy AppIndicator library, because the tray icon falls back to it at runtime.
 - The `.deb` package now states the C library version it needs. A system with an older C library refuses the installation with a clear message, instead of installing a program that cannot start.
 - The README now names the distributions the packages were verified on and explains how to install the package on an immutable system such as BazziteOS, where the root filesystem cannot be changed and the package has to be layered with `rpm-ostree`.
+- Fixed the Oink background on Windows no longer responding after being idle for a long time, which made the device list, speakers and microphones unavailable.
+- Fixed uninstalling failing on Windows (#46).
+- Fixed moving the mouse briefly entering game mode on Windows while a full-screen program hides the pointer.
+- Fixed "Disable hidden displays in the system" on Windows taking effect only after the layout changed or Oink restarted.
+- Fixed Windows always asking for a restart after installing or uninstalling the virtual microphone. It now asks only when a restart is really needed, and uninstalling Oink also asks when one is needed.
 
 ## Compatibility
 
-- 0.3.7 works with 0.3.0 and later.
+- 0.3.6 works with 0.3.0 and later.
 
 ## Downloads
 
 - **Linux (x64):** the `.deb` or `.rpm` file — a desktop session with X11, or a Wayland session through XWayland.
 - **Linux (arm64):** the `.deb` or `.rpm` file — a desktop session with X11, or a Wayland session through XWayland.
+
+The Linux packages are unsigned. `dnf install` and `apt install` take an unsigned local package as it is, while zypper stops and asks, so install it with `sudo zypper --no-gpg-checks install ./Oink-<version>-linux-<arch>.rpm`.

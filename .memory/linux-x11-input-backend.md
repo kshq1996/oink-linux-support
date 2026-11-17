@@ -15,7 +15,7 @@ Facts learned while adding the X11 input backend to `crates/oink-input` (2026-11
   (measured on a 1280x1024 screen: detail 0 + x=640 lands on pixel 640). Relative motion uses detail 1.
 - XRecord needs two connections: a control connection (create/disable the context) and a data
   connection (`record_enable_context` returns an iterator of replies; it ends on category 5).
-- On this workstation the `oink-linux-build:0.3.7-amd64` image is actually an **arm64** image, so
+- On this workstation the `oink-linux-build:0.3.6-amd64` image is actually an **arm64** image, so
   `tools/linux/check.sh` and `tools/linux/frontend.sh` must be run with `OINK_LINUX_ARCH=arm64`.
 - `tools/linux/frontend.sh` hangs (no output, no exit) when the OrbStack docker daemon disappears
   mid-run; it took an hour to hit the 3600 s deadline. Pipe it through `tee <log>` and read the
