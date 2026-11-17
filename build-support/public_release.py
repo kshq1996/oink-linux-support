@@ -76,7 +76,7 @@ def stage(packages, output, platform, build, commit):
         raise ValueError('package version/build/source differs from checkout')
     if record.get('source_commit') is not None:
         raise ValueError('public packages must use --public-version')
-    if not re.fullmatch('[0-9a-f]{40}', commit):
+    if not isinstance(commit, str) or not re.fullmatch('[0-9a-f]{40}', commit):
         raise ValueError('full built commit required')
     proof = json.loads((path.parent / 'report-configuration-check.json').read_text())
     if proof != {'configured': True, 'report_sent': False, 'version': record['version'], 'build': build}:
