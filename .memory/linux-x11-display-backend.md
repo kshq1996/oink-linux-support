@@ -28,9 +28,18 @@ Facts learned while adding the X11/XRandR display backend to `crates/oink-displa
   rejects the 96-dpi one itself before calling `extent::reference_extent`.
 - RandR output names (`RRGetOutputInfo.name`) are the connector names (`DP-1`, `HDMI-1`) and survive
   re-plugging the same port, while the output XID changes — the connector name is the stable key.
+- **XWayland reports a scaled desktop in logical pixels while X11 clients live in the root
+  window's pixel space.** On a 1920x1200 panel at 150%, `xdpyinfo` reports a 1920x1200 root but
+  RandR reports the CRTC as 1280x800 (the logical size). The pointer, its capture and every
+  injection happen in the root window space, so the display geometry has to be converted: the
+  backend computes `RootScale::between(root_size, crtc_extent(outputs))` and scales the bounds
+  and the mode size by it. Two axes that disagree mean "the output does not fill the root", not
+  a scaled desktop, and the scale is then 1.
 
 **Why:** the rotation encoding and the scanout-size semantics are easy to get wrong and silently
-produce swapped or unrotated geometry; they are not visible from the x11rb docs alone.
+produce swapped or unrotated geometry; they are not visible from the x11rb docs alone. Without
+the root-space conversion the injected pointer is confined to the logical size, which looks like
+"the mouse only moves in a small area".
 **How to apply:** reuse these answers when touching `crates/oink-display/src/linux/**`; verify with
 `OINK_LINUX_ARCH=arm64 tools/linux/check.sh {check,clippy,test} -p oink-display` (container details
 in [[linux-x11-input-backend]]).

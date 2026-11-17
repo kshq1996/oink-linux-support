@@ -22,6 +22,15 @@ Facts learned while adding the X11 input backend to `crates/oink-input` (2026-11
   log instead of `tail`, and re-check `docker info` when a run produces nothing.
 - `crates/oink-input/src/lib.rs` gates `mod macos;` with `#[cfg(target_os = "macos")]`; without it the
   crate cannot build on Linux (objc2/libc are macOS-only dependencies).
+- **The routing owner needs its wake source before the capture threads start.** The agent's owner
+  stores the wake in `shared.wake` and `InputThread::wake()` panics with "capture startup installed
+  its wake source" when it is missing. The Linux capture therefore calls `owner.set_wake(wake)`
+  in `start_inner` (before the reader and dispatcher threads exist) and only installs the owner
+  into the dispatch thread's thread-local afterwards (`capture_loop::install_owner`).
+- **The owner must learn whether the capture works.** The X11 reader sends `CaptureReady` after
+  `record_enable_context` succeeded and `CaptureFailed` when it failed; the dispatch thread turns
+  them into `capture_available(true/false)`. Without that the UI keeps showing the pointer as
+  unusable.
 
 **Why:** these are the failure modes that cost the most time and are invisible from the code alone.
 **How to apply:** reuse these answers when touching `crates/oink-input/src/linux/**` or the container
