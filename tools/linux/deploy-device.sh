@@ -15,6 +15,8 @@ VERSION=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['versio
 REPO=${OINK_REPO:-kshq1996/oink-linux-support}
 WORK=${WORK:-/tmp/oink-deploy-$ARCH}
 source "$ROOT/tools/linux/image.sh"
+# shellcheck source=tools/linux/proxy.sh
+source "$ROOT/tools/linux/proxy.sh"
 IMAGE=${OINK_LINUX_IMAGE:-${IMAGE_PREFIX}-arm64}
 
 if [[ -z "$ARCH" || -z "$HOST" ]]; then
@@ -32,7 +34,8 @@ mkdir -p "$WORK/pkg"
 cd "$WORK"
 
 echo "Downloading Oink $VERSION for $ARCH"
-gh release download "v$VERSION" --repo "$REPO" \
+env ${OINK_LINUX_PROXY_HOST_ENV[@]+"${OINK_LINUX_PROXY_HOST_ENV[@]}"} \
+    gh release download "v$VERSION" --repo "$REPO" \
     --pattern "Oink-$VERSION-linux-$ARCH.rpm" --clobber
 
 echo "Unpacking the package"

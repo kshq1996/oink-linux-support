@@ -15,6 +15,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=tools/linux/image.sh
 source "$ROOT/tools/linux/image.sh"
+# shellcheck source=tools/linux/proxy.sh
+source "$ROOT/tools/linux/proxy.sh"
 CARGO_VOLUME_PREFIX="${OINK_LINUX_CARGO_VOLUME_PREFIX:-oink-linux-cargo}"
 TARGET_VOLUME_PREFIX="${OINK_LINUX_TARGET_VOLUME_PREFIX:-oink-linux-target}"
 
@@ -40,7 +42,9 @@ IMAGE="$IMAGE_PREFIX-$ARCH"
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
     docker buildx build --platform "linux/$ARCH" \
         --file "$ROOT/tools/linux/Dockerfile" \
-        --tag "$IMAGE" --load "$ROOT/tools/linux"
+        --tag "$IMAGE" --load \
+        ${OINK_LINUX_PROXY_BUILD_FLAGS[@]+"${OINK_LINUX_PROXY_BUILD_FLAGS[@]}"} \
+        "$ROOT/tools/linux"
 fi
 
 mkdir -p "$OUTPUT_ROOT"
@@ -62,4 +66,5 @@ docker run --rm --platform "linux/$ARCH" \
     --env GIT_CONFIG_COUNT=1 \
     --env GIT_CONFIG_KEY_0=safe.directory \
     --env GIT_CONFIG_VALUE_0='*' \
+    ${OINK_LINUX_PROXY_RUN_FLAGS[@]+"${OINK_LINUX_PROXY_RUN_FLAGS[@]}"} \
     "$IMAGE" /src/tools/linux/release-package-inside.sh

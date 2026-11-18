@@ -37,6 +37,8 @@ The Linux backends use X11 for the clipboard (the X11 selection protocol) and th
 
 System audio is not available on Linux yet: playing another device's audio on this device and sharing the microphone need a native audio backend, which Linux does not have yet. Everything else — keyboard, mouse, clipboard, display layout and device discovery — works. The trackpad is captured in an X11 session; a Wayland session does not read the touchpad's gestures yet.
 
+On a handheld, a gamepad's stick reaches the desktop as a mouse: the kernel opens a node for the controller that reports relative motion, and udev tags it as a mouse. The stick then drags the injected pointer around, and the cursor looks stuck. Oink leaves the gamepad's nodes out of the capture, takes them away from the desktop while the other device holds the pointer, and the packages install a udev rule that keeps the controller's mouse node out of the pointer for good.
+
 The layout view draws the desktop wallpaper as the background of each screen, read from the KDE Plasma or GNOME settings.
 
 On an immutable Fedora system, such as BazziteOS, Universal Blue or a Fedora

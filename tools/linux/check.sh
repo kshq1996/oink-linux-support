@@ -13,12 +13,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=tools/linux/image.sh
 source "$ROOT/tools/linux/image.sh"
+# shellcheck source=tools/linux/proxy.sh
+source "$ROOT/tools/linux/proxy.sh"
 ARCH="${OINK_LINUX_ARCH:-amd64}"
 IMAGE="$IMAGE_PREFIX-$ARCH"
 
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
     docker buildx build --platform "linux/$ARCH" \
-        --file "$ROOT/tools/linux/Dockerfile" --tag "$IMAGE" --load "$ROOT/tools/linux"
+        --file "$ROOT/tools/linux/Dockerfile" --tag "$IMAGE" --load \
+        ${OINK_LINUX_PROXY_BUILD_FLAGS[@]+"${OINK_LINUX_PROXY_BUILD_FLAGS[@]}"} \
+        "$ROOT/tools/linux"
 fi
 
 exec docker run --rm --platform "linux/$ARCH" \
@@ -27,4 +31,5 @@ exec docker run --rm --platform "linux/$ARCH" \
     --volume "oink-linux-target-$ARCH:/work/target" \
     --env CARGO_TARGET_DIR=/work/target \
     --env OINK_LINUX_UID="$(id -u)" \
+    ${OINK_LINUX_PROXY_RUN_FLAGS[@]+"${OINK_LINUX_PROXY_RUN_FLAGS[@]}"} \
     "$IMAGE" /src/tools/linux/check-in-container.sh "$@"

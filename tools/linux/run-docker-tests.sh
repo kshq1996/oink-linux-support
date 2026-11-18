@@ -14,6 +14,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=tools/linux/image.sh
 source "$ROOT/tools/linux/image.sh"
+# shellcheck source=tools/linux/proxy.sh
+source "$ROOT/tools/linux/proxy.sh"
 CARGO_VOLUME_PREFIX="${OINK_LINUX_CARGO_VOLUME_PREFIX:-oink-linux-cargo}"
 TARGET_VOLUME_PREFIX="${OINK_LINUX_TARGET_VOLUME_PREFIX:-oink-linux-target}"
 
@@ -38,7 +40,9 @@ build_image() {
     fi
     docker buildx build --platform "linux/$arch" \
         --file "$ROOT/tools/linux/Dockerfile" \
-        --tag "$IMAGE_PREFIX-$arch" --load "$ROOT/tools/linux"
+        --tag "$IMAGE_PREFIX-$arch" --load \
+        ${OINK_LINUX_PROXY_BUILD_FLAGS[@]+"${OINK_LINUX_PROXY_BUILD_FLAGS[@]}"} \
+        "$ROOT/tools/linux"
 }
 
 run_one() {
@@ -51,6 +55,7 @@ run_one() {
         --env OINK_LINUX_DENY="$DENY" \
         --env CARGO_TARGET_DIR=/work/target \
         --env OINK_LINUX_UID="$(id -u)" \
+        ${OINK_LINUX_PROXY_RUN_FLAGS[@]+"${OINK_LINUX_PROXY_RUN_FLAGS[@]}"} \
         "$IMAGE_PREFIX-$arch" /src/tools/linux/test.sh
 }
 
