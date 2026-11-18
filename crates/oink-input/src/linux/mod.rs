@@ -11,7 +11,12 @@
 //! - X11 没有事件过滤钩子，XRecord 是被动记录：截获回调的返回值被忽略，本机照常处理事件。
 
 mod capture;
+mod evdev;
 mod inject;
+mod keycodes;
+mod scale;
+mod uinput;
+mod wayland;
 
 use std::collections::VecDeque;
 use std::fmt;
@@ -263,8 +268,20 @@ fn clamp_axis(value: f64, extent: u16) -> i16 {
     value.round().clamp(0.0, max) as i16
 }
 
-/// 创建本机（Linux / X11）的实现。
+/// 当前是不是 Wayland 会话。
+///
+/// `WAYLAND_DISPLAY` 由合成器的会话环境给出；X11 会话里没有它。
+fn wayland_session() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_some_and(|value| !value.is_empty())
+}
+
+/// 创建本机（Linux）的实现。
+///
+/// Wayland 会话用 [`wayland`]：X11 在 Wayland 下只是客人，XTEST 挪不动屏幕上的光标。
 pub(crate) fn backend() -> Result<Box<dyn InputBackend>, InputError> {
+    if wayland_session() {
+        return wayland::backend();
+    }
     let (conn, screen) =
         RustConnection::connect(None).map_err(|e| InputError::Platform(format!("连接 X 服务器失败：{e}")))?;
     // RECORD 用来截获，XTEST 用来注入：缺一个就没法工作。

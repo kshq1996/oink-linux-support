@@ -430,17 +430,24 @@ const MAX_NOTCHES: u32 = 64;
 /// `dx > 0` → 按钮 7，`dx < 0` → 按钮 6。
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn scroll_buttons(dx: f64, dy: f64, unit: ScrollUnit) -> Vec<u8> {
-    let (dx, dy) = match unit {
+    let (dx, dy) = scroll_notches(dx, dy, unit);
+    let mut buttons = Vec::new();
+    push_notches(&mut buttons, dy, WHEEL_UP, WHEEL_DOWN);
+    push_notches(&mut buttons, dx, WHEEL_RIGHT, WHEEL_LEFT);
+    buttons
+}
+
+/// 滚动量 → 格数（可带小数）。
+///
+/// 像素单位按 `100/3` 像素一行、每格 3 行换算；行单位直接当格数用。
+pub(crate) fn scroll_notches(dx: f64, dy: f64, unit: ScrollUnit) -> (f64, f64) {
+    match unit {
         ScrollUnit::Line => (dx, dy),
         ScrollUnit::Pixel => (
             dx / (PIXELS_PER_LINE * LINES_PER_NOTCH),
             dy / (PIXELS_PER_LINE * LINES_PER_NOTCH),
         ),
-    };
-    let mut buttons = Vec::new();
-    push_notches(&mut buttons, dy, WHEEL_UP, WHEEL_DOWN);
-    push_notches(&mut buttons, dx, WHEEL_RIGHT, WHEEL_LEFT);
-    buttons
+    }
 }
 
 /// 把一个方向的滚动量换算成若干个滚轮按钮。
