@@ -19,6 +19,7 @@ use oink_foundation::input::{KeyCode, MouseButton, ScrollUnit};
 use crate::InputError;
 use crate::linux::keycodes;
 use crate::linux::keymap;
+use crate::linux::scale::WHEEL_DETENT;
 
 // 内核的事件类型与代码（`include/uapi/linux/input-event-codes.h`）。
 const EV_SYN: u16 = 0x00;
@@ -92,9 +93,6 @@ struct InputEvent {
     code: u16,
     value: i32,
 }
-
-/// 滚轮一格的设备计数（内核的滚轮单位是 1/120 格）。
-const WHEEL_DETENT: i32 = 120;
 
 /// 虚拟输入设备：把 Oink 的事件写进内核。
 pub(crate) struct Injector {

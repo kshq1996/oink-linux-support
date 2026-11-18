@@ -48,6 +48,10 @@ enum Message {
     Wake,
     /// 停止截获。
     Stop,
+    /// 读取线程没能读设备：截获不可用。
+    CaptureFailed,
+    /// 读取线程已经在读设备：截获可用。
+    CaptureReady,
 }
 
 /// 截获状态：模式、追踪到的指针位置与停靠点。
@@ -454,6 +458,8 @@ fn dispatch(
             }
             Some(Message::Wake) => {}
             Some(Message::Stop) => break,
+            Some(Message::CaptureReady) => crate::capture_loop::capture_available(true),
+            Some(Message::CaptureFailed) => crate::capture_loop::capture_available(false),
             None => {}
         }
     }
@@ -467,6 +473,8 @@ fn dispatch(
 /// 读取线程：读内核设备，把事件派发出去。
 fn read_devices(inner: Arc<Inner>, mut devices: Vec<Device>, tx: Sender<Message>, flag: Arc<AtomicBool>) {
     let started = Instant::now();
+    // 设备已经打开：截获可用，界面不再把键鼠显示成「不可用」。
+    let _ = tx.send(Message::CaptureReady);
     let mut buffer = vec![0u8; READ_BUFFER];
     // 位移是设备计数，转成逻辑像素（鼠标的 DPI 决定系数）。
     let mut motion = (0f64, 0f64);
@@ -488,6 +496,8 @@ fn read_devices(inner: Arc<Inner>, mut devices: Vec<Device>, tx: Sender<Message>
             if error.kind() == std::io::ErrorKind::Interrupted {
                 continue;
             }
+            tracing::warn!("读取输入设备失败：{error}");
+            let _ = tx.send(Message::CaptureFailed);
             break;
         }
         for (index, device) in devices.iter_mut().enumerate() {
