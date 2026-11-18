@@ -24,6 +24,12 @@ Facts learned while adding the Linux wallpaper backend to `crates/oink-display` 
 - Decoding and encoding use the `image` crate (`png` + `jpeg`, no default features) as a Linux-only
   dependency of `oink-display`. The crate was already in the graph through `oink-agent` and the Tauri
   app, so `Cargo.lock` only gained the dependency edge and the licence inventory did not change.
+- **Fedora and Bazzite ship their default wallpaper as JPEG XL** (`/usr/share/wallpapers/convergence.jxl`),
+  and the `image` crate cannot decode that: the canvas stayed grey on a stock Plasma desktop until
+  the port added `jxl-oxide` (pure Rust, Apache-2.0, Linux-only dependency of `oink-display`). Its
+  `register_image_decoding_hook()` teaches the `image` crate the format *and* its file header, so
+  the wallpaper reader needs no format knowledge of its own; `image` stays at 0.25.9 with the same
+  features because jxl-oxide depends on it with `default-features = false`.
 - `image::Limits` is `#[non_exhaustive]`: build it from `Limits::default()` and assign the fields.
 - There is no "wallpaper changed" notification, so the change is detected by polling the mtime of the
   desktop's own configuration file (the Plasma appletsrc, the dconf database for GNOME) every two
