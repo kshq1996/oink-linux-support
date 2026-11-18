@@ -46,9 +46,16 @@ Full terms: licenses/texts/01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d4
 Full terms: licenses/texts/0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f.txt
 Full terms: licenses/texts/7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c.txt
 
+alloc-no-stdlib 2.0.4 (BSD-3-Clause)
+Copyright (c) 2016 Dropbox, Inc.
+Full terms: licenses/texts/c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae.txt
+
 alloc-no-stdlib 3.0.0 (BSD-3-Clause)
 Copyright (c) 2016 Dropbox, Inc.
 Full terms: licenses/texts/c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae.txt
+
+alloc-stdlib 0.2.4 (BSD-3-Clause)
+Full terms: licenses/texts/5a93d5831e1297ab10fe643e1a631e83be392896da14ee2951285a79012df69d.txt
 
 alloc-stdlib 0.3.0 (BSD-3-Clause)
 Full terms: licenses/texts/5a93d5831e1297ab10fe643e1a631e83be392896da14ee2951285a79012df69d.txt
@@ -186,6 +193,11 @@ Full terms: licenses/texts/b05785f9f18e6716bab63424b11454513b9943a222595b7041100
 breakpad-symbols 0.26.1 (MIT)
 Copyright (c) 2015-2023 rust-minidump contributors
 Full terms: licenses/texts/06de63df29199a394442b57a28e886059ddc940973e10646877a0793fd53e2c9.txt
+
+brotli-decompressor 5.0.3 (MIT)
+Copyright (c) 2016 Dropbox, Inc.
+Full terms: licenses/texts/b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5.txt
+Full terms: licenses/texts/c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae.txt
 
 brotli-decompressor 6.0.1 (MIT)
 Copyright (c) 2016 Dropbox, Inc.
@@ -1031,6 +1043,58 @@ Copyright (c) 2022 Chance Dinkins
 Copyright 2024 Chance Dinkins
 Full terms: licenses/texts/2bc107bdc18a74263d20bdefdb8073e17bc1a01b6b374dc5835683a33ee5ba7d.txt
 Full terms: licenses/texts/2cf31f2ae7f3feba667d50fc1d4d21ecf217703c04c3068b83c9a73b6dde723a.txt
+
+jxl-bitstream 1.1.0 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-coding 1.0.1 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-color 0.11.0 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-frame 0.13.3 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-grid 0.6.2 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-image 0.13.0 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-jbr 0.2.1 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-modular 0.11.3 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-oxide-common 1.0.0 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-oxide 0.12.6 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-render 0.12.4 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-threadpool 1.0.0 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
+
+jxl-vardct 0.11.1 (MIT)
+Full terms: licenses/texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt
+Full terms: licenses/texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt
 
 keyboard-types 0.8.3 (MIT)
 Copyright (c) 2017 Pyfisch
@@ -2513,22 +2577,12 @@ Full terms: licenses/texts/b05785f9f18e6716bab63424b11454513b9943a222595b7041100
 Full terms: licenses/texts/c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b.txt
 Full terms: licenses/texts/c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383.txt
 
-windows-sys 0.60.2 (MIT)
-Full terms: licenses/texts/b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5.txt
-Full terms: licenses/texts/c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b.txt
-Full terms: licenses/texts/c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383.txt
-
 windows-sys 0.61.2 (MIT)
 Full terms: licenses/texts/b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5.txt
 Full terms: licenses/texts/c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b.txt
 Full terms: licenses/texts/c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383.txt
 
 windows-targets 0.52.6 (MIT)
-Full terms: licenses/texts/b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5.txt
-Full terms: licenses/texts/c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b.txt
-Full terms: licenses/texts/c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383.txt
-
-windows-targets 0.53.5 (MIT)
 Full terms: licenses/texts/b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5.txt
 Full terms: licenses/texts/c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b.txt
 Full terms: licenses/texts/c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383.txt
@@ -2549,11 +2603,6 @@ Full terms: licenses/texts/c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee2056
 Full terms: licenses/texts/c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383.txt
 
 windows_x86_64_msvc 0.52.6 (MIT)
-Full terms: licenses/texts/b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5.txt
-Full terms: licenses/texts/c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b.txt
-Full terms: licenses/texts/c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383.txt
-
-windows_x86_64_msvc 0.53.1 (MIT)
 Full terms: licenses/texts/b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5.txt
 Full terms: licenses/texts/c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b.txt
 Full terms: licenses/texts/c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383.txt

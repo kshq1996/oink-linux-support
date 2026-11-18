@@ -14,7 +14,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{Once, mpsc};
 use std::time::{Duration, Instant, SystemTime};
 
 use image::codecs::jpeg::JpegEncoder;
@@ -106,11 +106,23 @@ fn encode_jpeg(image: &RgbImage, quality: u8) -> Option<Vec<u8>> {
 
 /// 解码壁纸文件。不是静态图片（目录、幻灯片清单、视频）或解码失败时为 `None`。
 fn decode(path: &Path) -> Option<DynamicImage> {
+    register_jxl_hook();
     let mut reader = ImageReader::open(path).ok()?.with_guessed_format().ok()?;
     let mut limits = Limits::default();
     limits.max_alloc = Some(MAX_ALLOC);
     reader.limits(limits);
     reader.decode().ok()
+}
+
+/// 把 JPEG XL 的解码钩子注册给 `image`（只注册一次）。
+///
+/// `image` 自己不认识 JPEG XL，而 Fedora 与 Bazzite 的默认壁纸就是 `.jxl`：
+/// 钩子同时登记解码器和文件头，所以读图的地方不用知道格式。
+fn register_jxl_hook() {
+    static HOOK: Once = Once::new();
+    HOOK.call_once(|| {
+        jxl_oxide::integration::register_image_decoding_hook();
+    });
 }
 
 /// 壁纸变化的监听器：桌面环境的配置变了就回调。
@@ -547,5 +559,51 @@ Color=#000000
     fn a_missing_wallpaper_leaves_the_screens_empty() {
         let directory = tempfile::TempDir::new().expect("the temp dir");
         assert!(read_all_from(&[], &directory.path().join("nothing.png")).is_none());
+    }
+
+    #[test]
+    fn a_jpeg_xl_wallpaper_is_decoded() {
+        // Fedora 与 Bazzite 的默认壁纸是 JPEG XL，`image` 不认识它：
+        // 靠 jxl-oxide 的解码钩子读出来。
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/wallpaper.jxl");
+        let decoded = decode(&path).expect("the JPEG XL wallpaper");
+        assert_eq!((decoded.width(), decoded.height()), (64, 32));
+        let rgb = decoded.to_rgb8();
+        let left = rgb.get_pixel(8, 16).0;
+        let right = rgb.get_pixel(56, 16).0;
+        assert!(
+            left[0] > 170 && left[1] < 90 && left[2] < 90,
+            "the left half is red: {left:?}"
+        );
+        assert!(
+            right[2] > 170 && right[0] < 90 && right[1] < 90,
+            "the right half is blue: {right:?}"
+        );
+    }
+
+    #[test]
+    fn a_jpeg_xl_wallpaper_becomes_a_thumbnail_per_screen() {
+        use oink_foundation::geom::Rect;
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/wallpaper.jxl");
+        let display = DisplayInfo {
+            key: "DP-1".to_string(),
+            name: "DP-1".to_string(),
+            bounds: Rect::new(0.0, 0.0, 1920.0, 1080.0),
+            pixel_width: 1920,
+            pixel_height: 1080,
+            reference_extent: None,
+            rotation_deg: 0,
+            is_primary: true,
+            is_builtin: false,
+            is_virtual: false,
+        };
+        let wallpapers = read_all_from(&[display], &path).expect("the wallpapers");
+        assert_eq!(wallpapers.len(), 1);
+        assert_eq!(
+            (wallpapers[0].thumbnail.width, wallpapers[0].thumbnail.height),
+            (480, 270)
+        );
+        assert_eq!(&wallpapers[0].thumbnail.jpeg[..3], &[0xff, 0xd8, 0xff]);
     }
 }
