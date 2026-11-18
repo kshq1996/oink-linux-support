@@ -218,8 +218,8 @@ fn plasma_wallpaper() -> Option<PathBuf> {
 /// 配置文件 `config` 里写的当前壁纸图片。
 fn plasma_wallpaper_in(config: &Path) -> Option<PathBuf> {
     let text = fs::read_to_string(config).ok()?;
-    let uri = plasma_image(&text)?;
-    uri_to_path(&uri)
+    let value = plasma_image(&text)?;
+    image_path(&value)
 }
 
 /// 从 Plasma 的 appletsrc 里找出静态壁纸插件的图片 URI。
@@ -281,7 +281,7 @@ fn gnome_wallpaper() -> Option<PathBuf> {
         let Some(uri) = gsettings_get("org.gnome.desktop.background", key) else {
             continue;
         };
-        let Some(path) = uri_to_path(&uri) else {
+        let Some(path) = image_path(&uri) else {
             continue;
         };
         if path.is_file() {
@@ -349,13 +349,21 @@ fn config_home() -> Option<PathBuf> {
     (!home.is_empty()).then(|| PathBuf::from(home).join(".config"))
 }
 
-/// `file://` URI 变成本地路径。带主机名的（`file://host/path`）不支持。
-fn uri_to_path(uri: &str) -> Option<PathBuf> {
-    let rest = uri.strip_prefix("file://")?;
-    if !rest.starts_with('/') {
-        return None;
+/// 壁纸配置里写的图片位置。
+///
+/// Plasma 5 写的是 `file://` URI，Plasma 6 直接写绝对路径（`/usr/share/wallpapers/…`），
+/// 两种都要认。带主机名的（`file://host/path`）不支持。
+fn image_path(value: &str) -> Option<PathBuf> {
+    if let Some(rest) = value.strip_prefix("file://") {
+        if !rest.starts_with('/') {
+            return None;
+        }
+        return Some(PathBuf::from(percent_decode(rest)));
     }
-    Some(PathBuf::from(percent_decode(rest)))
+    if value.starts_with('/') {
+        return Some(PathBuf::from(value));
+    }
+    None
 }
 
 /// 解码 `file://` URI 里的百分号编码。
@@ -452,30 +460,39 @@ Color=#000000
     }
 
     #[test]
-    fn uri_to_path_reads_local_files() {
+    fn image_path_reads_local_files() {
         assert_eq!(
-            uri_to_path("file:///usr/share/backgrounds/a.png"),
+            image_path("file:///usr/share/backgrounds/a.png"),
             Some(PathBuf::from("/usr/share/backgrounds/a.png"))
         );
     }
 
     #[test]
-    fn uri_to_path_decodes_percent_escapes() {
+    fn image_path_reads_the_plain_path_of_plasma_6() {
+        // Plasma 6 直接写绝对路径，不写 `file://` URI。
         assert_eq!(
-            uri_to_path("file:///usr/share/Plasma%20Solid.png"),
+            image_path("/usr/share/wallpapers/convergence.jxl"),
+            Some(PathBuf::from("/usr/share/wallpapers/convergence.jxl"))
+        );
+    }
+
+    #[test]
+    fn image_path_decodes_percent_escapes() {
+        assert_eq!(
+            image_path("file:///usr/share/Plasma%20Solid.png"),
             Some(PathBuf::from("/usr/share/Plasma Solid.png"))
         );
         assert_eq!(
-            uri_to_path("file:///usr/share/%E5%9B%BE%E7%89%87.png"),
+            image_path("file:///usr/share/%E5%9B%BE%E7%89%87.png"),
             Some(PathBuf::from("/usr/share/图片.png"))
         );
     }
 
     #[test]
-    fn uri_to_path_rejects_other_forms() {
-        assert_eq!(uri_to_path("file://host/share/a.png"), None);
-        assert_eq!(uri_to_path("https://example.invalid/a.png"), None);
-        assert_eq!(uri_to_path("relative.png"), None);
+    fn image_path_rejects_other_forms() {
+        assert_eq!(image_path("file://host/share/a.png"), None);
+        assert_eq!(image_path("https://example.invalid/a.png"), None);
+        assert_eq!(image_path("relative.png"), None);
     }
 
     #[test]
@@ -603,6 +620,51 @@ Color=#000000
         assert_eq!(
             (wallpapers[0].thumbnail.width, wallpapers[0].thumbnail.height),
             (480, 270)
+        );
+        assert_eq!(&wallpapers[0].thumbnail.jpeg[..3], &[0xff, 0xd8, 0xff]);
+    }
+
+    #[test]
+    fn the_plasma_6_wallpaper_becomes_a_thumbnail() {
+        // Plasma 6 的配置写绝对路径，图片是 JPEG XL：这条就是桌面上真正发生的事。
+        use oink_foundation::geom::Rect;
+
+        let directory = tempfile::TempDir::new().expect("the temp dir");
+        let wallpaper = directory.path().join("convergence.jxl");
+        fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/wallpaper.jxl"),
+            &wallpaper,
+        )
+        .expect("the wallpaper file");
+        let config = directory.path().join("plasma-org.kde.plasma.desktop-appletsrc");
+        fs::write(
+            &config,
+            format!(
+                "[Containments][1][Wallpaper][org.kde.image][General]\nImage={}\n",
+                wallpaper.display()
+            ),
+        )
+        .expect("the plasma config");
+        assert_eq!(plasma_wallpaper_in(&config), Some(wallpaper.clone()));
+
+        let display = DisplayInfo {
+            key: "eDP-1".to_string(),
+            name: "eDP-1".to_string(),
+            bounds: Rect::new(0.0, 0.0, 1920.0, 1200.0),
+            pixel_width: 1920,
+            pixel_height: 1200,
+            reference_extent: None,
+            rotation_deg: 0,
+            is_primary: true,
+            is_builtin: false,
+            is_virtual: false,
+        };
+        let wallpapers = read_all_from(&[display], &wallpaper).expect("the wallpapers");
+        assert_eq!(wallpapers.len(), 1);
+        assert_eq!(wallpapers[0].key, "eDP-1");
+        assert_eq!(
+            (wallpapers[0].thumbnail.width, wallpapers[0].thumbnail.height),
+            (480, 300)
         );
         assert_eq!(&wallpapers[0].thumbnail.jpeg[..3], &[0xff, 0xd8, 0xff]);
     }
