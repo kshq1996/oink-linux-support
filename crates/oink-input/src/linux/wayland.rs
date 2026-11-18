@@ -297,16 +297,18 @@ fn with_injector<T>(
 
 /// 绝对移动：把指针放到 `pos`（桌面逻辑像素）。
 fn move_to(inner: &Arc<Inner>, pos: Point, size: (u16, u16)) -> Result<(), InputError> {
-    with_injector(inner, |injector| injector.move_to(pos, size))
+    with_injector(inner, |injector| injector.move_to(pos, size))?;
+    // 合成器的光标被放到哪，截获线程就知道它在哪：Wayland 没有别的办法
+    // 读到光标的绝对位置，注入是我们唯一准确的位置来源。
+    lock(&inner.state).cursor = clamp_to_desktop(pos, size);
+    Ok(())
 }
 
 /// 相对移动：虚拟设备是绝对定位的，相对位移要自己换算成绝对坐标。
 fn move_relative(inner: &Arc<Inner>, dx: f64, dy: f64) -> Result<(), InputError> {
     let cursor = lock(&inner.state).cursor;
     let target = Point::new(cursor.x + dx, cursor.y + dy);
-    move_to(inner, target, desktop_size(inner))?;
-    lock(&inner.state).cursor = target;
-    Ok(())
+    move_to(inner, target, desktop_size(inner))
 }
 
 /// 开始截获：打开输入设备、起读取线程与派发线程。
