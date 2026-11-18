@@ -173,6 +173,40 @@ class LinuxStaging(unittest.TestCase):
             self.assertTrue(link.issym())
             self.assertEqual(link.linkname, f'/{B.INSTALL_DIRECTORY}/{B.I["binaries"]["ui"]}')
 
+    def test_the_package_installs_the_input_udev_rules(self):
+        """The seat's user needs access to the input devices.
+
+        The desktop reads them through the file descriptors systemd hands it,
+        so a plain process cannot: without the `uaccess` tag Oink cannot read
+        the keyboard and cannot take the stick's pointer node away from the
+        desktop. systemd runs the `uaccess` builtin from `73-seat-late.rules`,
+        so the rule file has to sort before it.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            payload, _ = self.stage(root)
+            rule = B.host_path(payload, B.UDEV_RULES_DIRECTORY) / B.UDEV_RULES_NAME
+            self.assertTrue(rule.is_file())
+            self.assertLess(B.UDEV_RULES_NAME, '73-seat-late.rules')
+            text = rule.read_text()
+            self.assertIn('TAG+="uaccess"', text)
+
+    def test_the_package_installs_the_gamepad_udev_rule(self):
+        """The stick must not fight the injected pointer.
+
+        The controller's mouse node is tagged as a mouse, so the desktop
+        drives the cursor with the stick. The installed rule takes that node
+        out of the pointer.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            payload, _ = self.stage(root)
+            rule = B.host_path(payload, B.UDEV_RULES_DIRECTORY) / B.UDEV_RULES_NAME
+            self.assertTrue(rule.is_file())
+            text = rule.read_text()
+            self.assertIn('ATTRS{name}=="*Controller*Mouse*"', text)
+            self.assertIn('ENV{ID_INPUT_MOUSE}=""', text)
+
     def test_the_desktop_entry_declares_one_main_category(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

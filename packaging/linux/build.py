@@ -38,7 +38,12 @@ DOC_DIRECTORY = PurePosixPath('usr/share/doc/oink')
 APPLICATIONS_DIRECTORY = PurePosixPath('usr/share/applications')
 BIN_DIRECTORY = PurePosixPath('usr/bin')
 ICONS_DIRECTORY = PurePosixPath('usr/share/icons/hicolor')
-
+UDEV_RULES_DIRECTORY = PurePosixPath('usr/lib/udev/rules.d')
+# systemd runs the `uaccess` builtin from `73-seat-late.rules`: it grants the
+# seat's user access to the devices that carry the `uaccess` tag. The tag has
+# to be set before that file runs, so Oink's rules sort before it — a `99-`
+# file would be too late and the access right would never be granted.
+UDEV_RULES_NAME = '65-oink-input.rules'
 
 def host_path(root, relative):
     """The host path of a package-relative POSIX path."""
@@ -127,6 +132,47 @@ def desktop_entry():
                       'X-GNOME-UsesNotifications=true',
                       ''])
 
+def udev_rules():
+    """The udev rules the product installs.
+
+    A gamepad's mouse node is a kernel artefact: the same controller also
+    opens a node that reports `REL_X`/`REL_Y` and `BTN_LEFT`, so udev tags it
+    as a mouse and the desktop drives the cursor with the stick. The injected
+    pointer then fights the stick, and the cursor looks stuck where the stick
+    drags it back. Clearing the mouse tag keeps the stick out of the pointer,
+    the way SteamOS does it for its own controller.
+
+    The first rule gives the seat's user access to the input devices. The
+    desktop reads them through the file descriptors systemd hands it, so a
+    plain process cannot: the nodes belong to the `input` group and the
+    desktop's user is usually not in it. systemd's own `uaccess` rules cover
+    other device classes, not input devices. Without the access right Oink
+    cannot read the keyboard and cannot take the stick's pointer node away
+    from the desktop.
+    """
+    return '\n'.join([
+        '# 输入设备：截获要读它们。',
+        '#',
+        '# 桌面（合成器）是用 systemd 传的文件描述符读输入设备的，普通进程读不到：',
+        '# 输入设备的节点归 `input` 组，而桌面的用户通常不在那个组里。',
+        '# systemd 的 uaccess 规则覆盖了别的设备类，输入设备不在里面，',
+        '# 所以这里给当前座位上的用户访问权。',
+        'SUBSYSTEM=="input", KERNEL=="event*", TAG+="uaccess"',
+        '',
+        '# 手柄的鼠标节点不要当作指针。',
+        '#',
+        '# 内核把同一个手柄开出三个节点：摇杆（js0）、按键（event*）和一个鼠标节点。',
+        '# 鼠标节点带 `REL_X`/`REL_Y` 和 `BTN_LEFT`，udev 把它标成 `ID_INPUT_MOUSE=1`，',
+        '# 桌面（libinput）就把它当成鼠标：摇杆一动，光标就跟着动。',
+        '# 共享指针注入的时候，两者会互相拉扯，光标像是被摇杆拖回原处。',
+        '#',
+        '# SteamOS 对自己的手柄也是这么处理的（`60-steam-input.rules` 清掉 `ID_INPUT_MOUSE`）。',
+        'SUBSYSTEM=="input", ATTRS{name}=="*Controller*Mouse*", ENV{ID_INPUT_MOUSE}=""',
+        'SUBSYSTEM=="input", ATTRS{name}=="*Gamepad*Mouse*", ENV{ID_INPUT_MOUSE}=""',
+        'SUBSYSTEM=="input", ATTRS{name}=="*Joystick*Mouse*", ENV{ID_INPUT_MOUSE}=""',
+        '',
+    ])
+
 
 def stage(root, binaries, notes_file, record):
     """Lay out the installed tree the two packages share."""
@@ -154,6 +200,9 @@ def stage(root, binaries, notes_file, record):
     applications = host_path(root, APPLICATIONS_DIRECTORY)
     applications.mkdir(parents=True, exist_ok=True)
     (applications / 'com.hachiwii.oink.desktop').write_text(desktop_entry(), encoding='utf-8')
+    rules = host_path(root, UDEV_RULES_DIRECTORY)
+    rules.mkdir(parents=True)
+    (rules / UDEV_RULES_NAME).write_text(udev_rules(), encoding='utf-8')
     documentation = host_path(root, DOC_DIRECTORY)
     documentation.mkdir(parents=True, exist_ok=True)
     copy_notices(documentation)
