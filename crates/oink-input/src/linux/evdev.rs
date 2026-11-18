@@ -147,15 +147,9 @@ pub(crate) fn open_devices() -> Vec<Device> {
         }
         let name = device_name(fd);
         let rel = capability_bits(fd, EV_REL as u8, 8);
-        let reports_motion =
-            bit_set(&types, EV_REL) && bit_set(&rel, REL_X) && bit_set(&rel, REL_Y);
+        let reports_motion = bit_set(&types, EV_REL) && bit_set(&rel, REL_X) && bit_set(&rel, REL_Y);
         let keys = capability_bits(fd, EV_KEY as u8, 128);
-        let roles = classify(
-            &name,
-            reports_motion,
-            bit_set(&keys, BTN_LEFT),
-            bit_set(&keys, KEY_A),
-        );
+        let roles = classify(&name, reports_motion, bit_set(&keys, BTN_LEFT), bit_set(&keys, KEY_A));
         devices.push(Device {
             file,
             name,
@@ -222,7 +216,6 @@ fn classify(name: &str, reports_motion: bool, left_button: bool, key_a: bool) ->
         gamepad_pointer: gamepad && reports_motion,
     }
 }
-
 
 /// 独占一台输入设备：别的读者（合成器）再也收不到它的事件。
 ///

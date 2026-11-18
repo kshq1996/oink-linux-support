@@ -329,7 +329,6 @@ fn take_over_gamepad_pointers(inner: &Arc<Inner>, take_over: bool) {
     }
 }
 
-
 /// 开始截获：打开输入设备、起读取线程与派发线程。
 fn start_inner(
     inner: &Arc<Inner>,

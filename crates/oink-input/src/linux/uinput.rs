@@ -419,10 +419,7 @@ mod tests {
         let registered = std::fs::read_dir("/sys/class/input")
             .expect("读 /sys/class/input")
             .filter_map(Result::ok)
-            .any(|entry| {
-                std::fs::read_to_string(entry.path().join("name"))
-                    .is_ok_and(|value| value.trim() == name)
-            });
+            .any(|entry| std::fs::read_to_string(entry.path().join("name")).is_ok_and(|value| value.trim() == name));
         drop(injector);
         assert!(registered, "虚拟设备应该出现在 /sys/class/input 里");
     }
