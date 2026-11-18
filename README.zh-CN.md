@@ -19,7 +19,7 @@ Oink 是 Oink Is Not only a KVM 的缩写，是一款在多台 Windows、Mac 和
 
 - **Mac**：Apple 芯片（arm64），macOS 14.2 及以上；Intel（x64），macOS 14.2 及以上（未经测试）
 - **Windows**：x64，Windows 10 1809（build 17763）及以上，或 Windows 11。22H2 之前的 Windows 10 版本未经测试。Windows 10 LTSC（如 LTSC 2019 / LTSC 2021）不自带 WebView2 Runtime，请先安装 Microsoft Edge WebView2 Runtime（Evergreen）：https://developer.microsoft.com/microsoft-edge/webview2/
-- **Linux**：x64 与 arm64，需要带 X11（或 XWayland）的桌面会话。安装包在 Ubuntu 24.04 上构建，需要 glibc 2.39 及以上。Debian 13 及以上、Ubuntu 24.04 及以上、Linux Mint 22 及以上安装 `.deb` 包；Fedora 40 及以上、openSUSE Tumbleweed 安装 `.rpm` 包。
+- **Linux**：x64 与 arm64，需要 X11 或 Wayland 桌面会话。安装包在 Ubuntu 24.04 上构建，需要 glibc 2.39 及以上。Debian 13 及以上、Ubuntu 24.04 及以上、Linux Mint 22 及以上安装 `.deb` 包；Fedora 40 及以上、openSUSE Tumbleweed 安装 `.rpm` 包。
 
 如果 SmartScreen 提示“Windows 已保护你的电脑”，仅在出现相应选项时点击 **更多信息 → 仍要运行**。UAC 可能显示发布者未知。
 
@@ -33,9 +33,11 @@ Linux 安装包包含三个程序：托盘应用 `oink`、命令行工具 `oink-
 sudo zypper --no-gpg-checks install ./Oink-<version>-linux-<arch>.rpm
 ```
 
-Linux 后端使用 X11：输入采集与注入通过 XRecord 和 XTest，剪贴板通过 X11 选择协议，显示器布局通过 XRandR。Wayland 会话通过 XWayland 工作。macOS 和 Windows 上的光标拖尾覆盖层在 Linux 上不可用。
+Linux 后端的剪贴板走 X11 选择协议，显示器布局走 XRandR。输入的采集与注入取决于会话类型：X11 会话用 XRecord 和 XTest；Wayland 会话直接读内核的输入设备（`/dev/input`）采集，写虚拟指针设备（`/dev/uinput`）注入——XWayland 挪不动合成器的光标。
 
-系统音频在 Linux 上暂不可用：把其他设备的音频播放到本机、共享麦克风都需要原生音频后端，Linux 尚无该后端。其余功能——键盘、鼠标、触控板、剪贴板、显示器布局与设备发现——均可正常使用。
+采集拿到的是鼠标的原始计数，共享指针的速度取决于鼠标的 DPI 与合成器的指针加速；在桌面设置里关掉指针加速，速度就是准的。macOS 和 Windows 上的光标拖尾覆盖层在 Linux 上不可用。
+
+系统音频在 Linux 上暂不可用：把其他设备的音频播放到本机、共享麦克风都需要原生音频后端，Linux 尚无该后端。其余功能——键盘、鼠标、剪贴板、显示器布局与设备发现——均可正常使用。触控板在 X11 会话里可以采集，Wayland 会话暂不读取触控板手势。
 
 布局界面把桌面壁纸画成每块屏幕的背景，壁纸读自 KDE Plasma 或 GNOME 的设置。
 

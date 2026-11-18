@@ -19,7 +19,7 @@ Oink는 "Oink Is Not only a KVM"의 약자로, 여러 대의 Windows, Mac, Linux
 
 - **Mac**: Apple 실리콘(arm64), macOS 14.2 이상. Intel(x64), macOS 14.2 이상(테스트되지 않음)
 - **Windows**: x64, Windows 10 1809(빌드 17763) 이상 또는 Windows 11. 22H2 이전 Windows 10 버전은 테스트되지 않았습니다. Windows 10 LTSC(LTSC 2019 / LTSC 2021 등)에는 WebView2 Runtime이 기본으로 포함되지 않으므로, 먼저 Microsoft Edge WebView2 Runtime(Evergreen)을 설치하세요: https://developer.microsoft.com/microsoft-edge/webview2/
-- **Linux**: x64 및 arm64, X11(또는 XWayland)이 있는 데스크톱 세션 필요. 패키지는 Ubuntu 24.04에서 빌드되며 glibc 2.39 이상이 필요합니다. Debian 13 이상, Ubuntu 24.04 이상, Linux Mint 22 이상에서는 `.deb` 패키지를, Fedora 40 이상, openSUSE Tumbleweed에서는 `.rpm` 패키지를 설치합니다.
+- **Linux**: x64 및 arm64, X11 또는 Wayland 데스크톱 세션 필요. 패키지는 Ubuntu 24.04에서 빌드되며 glibc 2.39 이상이 필요합니다. Debian 13 이상, Ubuntu 24.04 이상, Linux Mint 22 이상에서는 `.deb` 패키지를, Fedora 40 이상, openSUSE Tumbleweed에서는 `.rpm` 패키지를 설치합니다.
 
 SmartScreen에 "Windows의 PC 보호" 메시지가 표시되면, 해당 옵션이 있을 때만 **추가 정보 → 실행**을 선택하세요. UAC에서 게시자를 알 수 없음으로 표시될 수 있습니다.
 
@@ -33,9 +33,11 @@ Linux 패키지는 세 가지 프로그램을 설치합니다: 트레이 애플�
 sudo zypper --no-gpg-checks install ./Oink-<version>-linux-<arch>.rpm
 ```
 
-Linux 백엔드는 X11을 사용합니다: 입력 캡처와 주입은 XRecord와 XTest, 클립보드는 X11 선택 프로토콜, 디스플레이 배치는 XRandR을 사용합니다. Wayland 세션에서는 XWayland를 통해 동작합니다. macOS와 Windows가 그리는 커서 트레일 오버레이는 Linux에서 사용할 수 없습니다.
+Linux 백엔드는 클립보드에 X11 선택 프로토콜, 디스플레이 배치에 XRandR을 사용합니다. 입력 캡처와 주입은 세션에 따라 달라집니다: X11 세션에서는 XRecord와 XTest를 쓰고, Wayland 세션에서는 커널 입력 장치(`/dev/input`)를 읽어 캡처하고 가상 포인터 장치(`/dev/uinput`)에 써서 주입합니다(XWayland로는 컴포지터의 커서를 움직일 수 없기 때문입니다).
 
-시스템 오디오는 Linux에서 아직 사용할 수 없습니다. 다른 기기의 오디오를 이 기기에서 재생하거나 마이크를 공유하려면 네이티브 오디오 백엔드가 필요한데, Linux에는 아직 없습니다. 키보드, 마우스, 트랙패드, 클립보드, 디스플레이 배치, 기기 탐색 등 나머지 기능은 모두 동작합니다.
+캡처는 마우스의 원시 카운트를 읽으므로 공유 포인터의 속도는 마우스 DPI와 컴포지터의 포인터 가속에 좌우됩니다. 데스크톱 설정에서 포인터 가속을 끄면 속도가 정확해집니다. macOS와 Windows가 그리는 커서 트레일 오버레이는 Linux에서 사용할 수 없습니다.
+
+시스템 오디오는 Linux에서 아직 사용할 수 없습니다. 다른 기기의 오디오를 이 기기에서 재생하거나 마이크를 공유하려면 네이티브 오디오 백엔드가 필요한데, Linux에는 아직 없습니다. 키보드, 마우스, 클립보드, 디스플레이 배치, 기기 탐색 등 나머지 기능은 모두 동작합니다. 트랙패드는 X11 세션에서 캡처되며, Wayland 세션에서는 아직 제스처를 읽지 않습니다.
 
 레이아웃 화면에서는 데스크톱 배경화일이 각 화면의 배경으로 그려집니다. 배경화일은 KDE Plasma 또는 GNOME 설정에서 읽습니다.
 

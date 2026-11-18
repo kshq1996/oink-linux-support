@@ -19,7 +19,7 @@ Supported operating systems and versions:
 
 - **Mac:** Apple silicon (arm64), macOS 14.2+; Intel (x64), macOS 14.2+ (untested)
 - **Windows:** x64, Windows 10 version 1809 (build 17763) or later, or Windows 11. Windows 10 versions before 22H2 are untested. Windows 10 LTSC (such as LTSC 2019 / LTSC 2021) does not include the WebView2 Runtime; install the Microsoft Edge WebView2 Runtime (Evergreen) first: https://developer.microsoft.com/microsoft-edge/webview2/
-- **Linux:** x64 and arm64, in a desktop session with X11 (or XWayland). The packages are built on Ubuntu 24.04 and need glibc 2.39 or newer. Install the `.deb` package on Debian 13 or newer, Ubuntu 24.04 or newer and Linux Mint 22 or newer, or the `.rpm` package on Fedora 40 or newer and openSUSE Tumbleweed.
+- **Linux:** x64 and arm64, in an X11 or Wayland desktop session. The packages are built on Ubuntu 24.04 and need glibc 2.39 or newer. Install the `.deb` package on Debian 13 or newer, Ubuntu 24.04 or newer and Linux Mint 22 or newer, or the `.rpm` package on Fedora 40 or newer and openSUSE Tumbleweed.
 
 If SmartScreen says "Windows protected your PC", use **More info → Run anyway** only if offered. UAC may show an unknown publisher.
 
@@ -33,9 +33,9 @@ The package is unsigned. `dnf install` and `apt install` take an unsigned local 
 sudo zypper --no-gpg-checks install ./Oink-<version>-linux-<arch>.rpm
 ```
 
-The Linux backends use X11: input capture and injection through XRecord and XTest, the clipboard through the X11 selection protocol and the display layout through XRandR. A Wayland session works through XWayland. The cursor trail overlay that macOS and Windows draw is not available on Linux.
+The Linux backends use X11 for the clipboard (the X11 selection protocol) and the display layout (XRandR). Input capture and injection depend on the session: an X11 session uses XRecord and XTest, a Wayland session reads the kernel's input devices (`/dev/input`) for the capture and writes a virtual pointer device (`/dev/uinput`) for the injection, because XWayland cannot move the compositor's cursor. The capture reads the mouse's raw device counts, so the shared pointer's speed follows the mouse's DPI and the compositor's pointer acceleration; switching the pointer acceleration off in the desktop settings makes the speed exact. The cursor trail overlay that macOS and Windows draw is not available on Linux.
 
-System audio is not available on Linux yet: playing another device's audio on this device and sharing the microphone need a native audio backend, which Linux does not have yet. Everything else — keyboard, mouse, trackpad, clipboard, display layout and device discovery — works.
+System audio is not available on Linux yet: playing another device's audio on this device and sharing the microphone need a native audio backend, which Linux does not have yet. Everything else — keyboard, mouse, clipboard, display layout and device discovery — works. The trackpad is captured in an X11 session; a Wayland session does not read the touchpad's gestures yet.
 
 The layout view draws the desktop wallpaper as the background of each screen, read from the KDE Plasma or GNOME settings.
 

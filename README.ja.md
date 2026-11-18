@@ -19,7 +19,7 @@ Oink は「Oink Is Not only a KVM」の略で、複数の Windows と Mac と Li
 
 - **Mac**：Apple シリコン（arm64）、macOS 14.2 以降。Intel（x64）、macOS 14.2 以降（未テスト）
 - **Windows**：x64、Windows 10 1809（ビルド 17763）以降、または Windows 11。22H2 より前の Windows 10 バージョンは未テストです。Windows 10 LTSC（LTSC 2019 / LTSC 2021 など）には WebView2 Runtime が付属しないため、先に Microsoft Edge WebView2 Runtime（Evergreen）をインストールしてください：https://developer.microsoft.com/microsoft-edge/webview2/
-- **Linux**：x64 と arm64、X11（または XWayland）のあるデスクトップセッションが必要です。パッケージは Ubuntu 24.04 でビルドされ、glibc 2.39 以降が必要です。Debian 13 以降、Ubuntu 24.04 以降、Linux Mint 22 以降では `.deb`、Fedora 40 以降、openSUSE Tumbleweed では `.rpm` パッケージをインストールします。
+- **Linux**：x64 と arm64、X11 または Wayland のデスクトップセッションが必要です。パッケージは Ubuntu 24.04 でビルドされ、glibc 2.39 以降が必要です。Debian 13 以降、Ubuntu 24.04 以降、Linux Mint 22 以降では `.deb`、Fedora 40 以降、openSUSE Tumbleweed では `.rpm` パッケージをインストールします。
 
 SmartScreen に「Windows によって PC が保護されました」と表示された場合は、選択肢が表示されたときに限り **詳細情報 → 実行** を選んでください。UAC では発行元が不明と表示されることがあります。
 
@@ -33,9 +33,11 @@ Linux パッケージは 3 つのプログラムを導入します。トレイ�
 sudo zypper --no-gpg-checks install ./Oink-<version>-linux-<arch>.rpm
 ```
 
-Linux のバックエンドは X11 を使います。入力の取得と注入は XRecord と XTest、クリップボードは X11 の選択プロトコル、ディスプレイ配置は XRandR です。Wayland セッションでは XWayland 経由で動作します。macOS と Windows が描くカーソルトレイルのオーバーレイは Linux では利用できません。
+Linux のバックエンドは、クリップボードに X11 の選択プロトコル、ディスプレイ配置に XRandR を使います。入力の取得と注入はセッションで異なります。X11 セッションでは XRecord と XTest、Wayland セッションではカーネルの入力デバイス（`/dev/input`）を読み、仮想ポインタデバイス（`/dev/uinput`）へ書き込みます（XWayland ではコンポジタのカーソルを動かせないためです）。
 
-システムオーディオは Linux ではまだ利用できません。他のデバイスの音声をこのデバイスで再生したりマイクを共有したりするにはネイティブのオーディオバックエンドが必要ですが、Linux にはまだありません。キーボード、マウス、トラックパッド、クリップボード、ディスプレイ配置、デバイス探索など、ほかの機能はすべて動作します。
+取得するのはマウスの生のカウント値なので、共有ポインタの速度はマウスの DPI とコンポジタのポインタ加速に左右されます。デスクトップ設定でポインタ加速をオフにすると速度は正確になります。macOS と Windows が描くカーソルトレイルのオーバーレイは Linux では利用できません。
+
+システムオーディオは Linux ではまだ利用できません。他のデバイスの音声をこのデバイスで再生したりマイクを共有したりするにはネイティブのオーディオバックエンドが必要ですが、Linux にはまだありません。キーボード、マウス、クリップボード、ディスプレイ配置、デバイス探索など、ほかの機能はすべて動作します。トラックパッドは X11 セッションで取得でき、Wayland セッションではまだジェスチャを読み取りません。
 
 レイアウト画面では、デスクトップ壁紙が各画面の背景として描かれます。壁紙の読み込み元は KDE Plasma または GNOME の設定です。
 
