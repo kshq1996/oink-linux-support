@@ -45,16 +45,18 @@ const fn ioc(direction: u32, kind: u8, number: u8, size: u32) -> libc::c_ulong {
     ((direction << 30) | (size << 16) | ((kind as u32) << 8) | (number as u32)) as libc::c_ulong
 }
 
-const IOC_WRITE: u32 = 3;
+const IOC_NONE: u32 = 0;
+const IOC_WRITE: u32 = 1;
 const UINPUT: u8 = b'U';
 
 const UI_SET_EVBIT: libc::c_ulong = ioc(IOC_WRITE, UINPUT, 100, 4);
 const UI_SET_KEYBIT: libc::c_ulong = ioc(IOC_WRITE, UINPUT, 101, 4);
 const UI_SET_RELBIT: libc::c_ulong = ioc(IOC_WRITE, UINPUT, 102, 4);
 const UI_SET_ABSBIT: libc::c_ulong = ioc(IOC_WRITE, UINPUT, 103, 4);
-const UI_SET_PROPBIT: libc::c_ulong = ioc(IOC_WRITE, UINPUT, 107, 4);
-const UI_DEV_SETUP: libc::c_ulong = ioc(IOC_WRITE, UINPUT, 108, 92);
-const UI_ABS_SETUP: libc::c_ulong = ioc(IOC_WRITE, UINPUT, 109, 24);
+const UI_SET_PROPBIT: libc::c_ulong = ioc(IOC_WRITE, UINPUT, 110, 4);
+const UI_DEV_SETUP: libc::c_ulong = ioc(IOC_WRITE, UINPUT, 3, 92);
+const UI_ABS_SETUP: libc::c_ulong = ioc(IOC_WRITE, UINPUT, 4, 28);
+const UI_DEV_CREATE: libc::c_ulong = ioc(IOC_NONE, UINPUT, 1, 0);
 
 /// `struct uinput_id`。
 #[repr(C)]
@@ -74,15 +76,19 @@ struct UinputSetup {
 }
 
 /// `struct uinput_abs_setup`。
+///
+/// 内核的头文件里 `filler` 是注释掉的，但 `input_absinfo` 要按 4 字节对齐，
+/// 所以 `code` 后面有两个字节的填充，整个结构 28 字节。
 #[repr(C)]
 struct UinputAbsSetup {
     code: u16,
     padding: u16,
-    minimum: u32,
-    maximum: u32,
-    fuzz: u32,
-    flat: u32,
-    resolution: u32,
+    value: i32,
+    minimum: i32,
+    maximum: i32,
+    fuzz: i32,
+    flat: i32,
+    resolution: i32,
 }
 
 /// `struct input_event`。
@@ -178,8 +184,8 @@ impl Injector {
         let count = bytes.len().min(setup.name.len() - 1);
         setup.name[..count].copy_from_slice(&bytes[..count]);
         self.ioctl(UI_DEV_SETUP, &setup as *const UinputSetup as *mut libc::c_void)?;
-        // 写一个空报告，内核这时才把设备注册上。
-        self.write_events(&[event(EV_SYN, SYN_REPORT, 0)])?;
+        // 建好设备之后才能往里写事件。
+        self.ioctl(UI_DEV_CREATE, std::ptr::null_mut())?;
         Ok(())
     }
 
@@ -273,8 +279,13 @@ impl Injector {
     }
 
     /// 设置一个能力位。
+    ///
+    /// 内核的 `UI_SET_*BIT` 系列收的是**值本身**，不是指针：内核的实现是
+    /// `uinput_set_bit(arg, evbit, EV_MAX)`，`arg` 就是那个编码（`/usr/include/linux/uinput.h`
+    /// 里的 `_IOW(..., int)` 是老写法留下的假象）。传指针的话，内核把一个巨大的
+    /// 地址当成编码，超过 `EV_MAX` 就回 EINVAL，虚拟设备根本建不起来。
     fn set_bit(&self, request: libc::c_ulong, bit: i32) -> Result<(), InputError> {
-        self.ioctl(request, bit as *mut libc::c_void)
+        self.ioctl_value(request, bit as libc::c_ulong)
     }
 
     /// 设置一个绝对坐标轴的范围。
@@ -282,8 +293,9 @@ impl Injector {
         let setup = UinputAbsSetup {
             code,
             padding: 0,
+            value: 0,
             minimum: 0,
-            maximum: u32::from(extent.saturating_sub(1)),
+            maximum: i32::from(extent.saturating_sub(1)),
             fuzz: 0,
             flat: 0,
             resolution: 0,
@@ -295,6 +307,17 @@ impl Injector {
     fn ioctl(&self, request: libc::c_ulong, argument: *mut libc::c_void) -> Result<(), InputError> {
         // SAFETY: `request` is one of the uinput request numbers and `argument`
         // points at the matching structure; the kernel reads it as documented.
+        let result = unsafe { libc::ioctl(self.fd, request, argument) };
+        if result < 0 {
+            return Err(InputError::Platform(format!("uinput ioctl 失败：{}", last_error())));
+        }
+        Ok(())
+    }
+
+    /// 调一次 `ioctl`，参数是**值**（内核直接从 `arg` 里读）。
+    fn ioctl_value(&self, request: libc::c_ulong, argument: libc::c_ulong) -> Result<(), InputError> {
+        // SAFETY: `request` is one of the uinput bit request numbers; the kernel
+        // reads the argument as the code itself.
         let result = unsafe { libc::ioctl(self.fd, request, argument) };
         if result < 0 {
             return Err(InputError::Platform(format!("uinput ioctl 失败：{}", last_error())));
@@ -361,5 +384,46 @@ mod tests {
         assert_eq!(clamp_axis(-10.0, 1920), 0);
         assert_eq!(clamp_axis(1919.4, 1920), 1919);
         assert_eq!(clamp_axis(5000.0, 1920), 1919);
+    }
+
+    #[test]
+    fn the_uinput_ioctl_numbers_match_the_kernel_header() {
+        // `/usr/include/linux/uinput.h`：`_IOC(dir, type, nr, size)`。
+        // 数字错了内核一律回 EINVAL，虚拟设备根本建不起来。
+        assert_eq!(UI_SET_EVBIT, 0x4004_5564);
+        assert_eq!(UI_SET_KEYBIT, 0x4004_5565);
+        assert_eq!(UI_SET_RELBIT, 0x4004_5566);
+        assert_eq!(UI_SET_ABSBIT, 0x4004_5567);
+        assert_eq!(UI_SET_PROPBIT, 0x4004_556e);
+        assert_eq!(UI_DEV_SETUP, 0x405c_5503);
+        assert_eq!(UI_ABS_SETUP, 0x401c_5504);
+        assert_eq!(UI_DEV_CREATE, 0x5501);
+    }
+
+    #[test]
+    fn the_absolute_axis_setup_has_the_kernel_layout() {
+        // `struct uinput_abs_setup`：`code` + 填充 + `struct input_absinfo`。
+        assert_eq!(std::mem::size_of::<UinputAbsSetup>(), 28);
+        assert_eq!(std::mem::size_of::<UinputSetup>(), 92);
+    }
+
+    #[test]
+    fn the_injector_registers_a_virtual_device() {
+        // 需要能写 `/dev/uinput`（桌面会话里的用户有权限，构建机上通常没有）：
+        // 没有权限就跳过，有权限时这条测试能抓住 ioctl 参数用错的问题。
+        if std::fs::OpenOptions::new().write(true).open("/dev/uinput").is_err() {
+            return;
+        }
+        let name = "Oink injector test";
+        let injector = Injector::open(name, (1920, 1080)).expect("建虚拟输入设备");
+        let registered = std::fs::read_dir("/sys/class/input")
+            .expect("读 /sys/class/input")
+            .filter_map(Result::ok)
+            .any(|entry| {
+                std::fs::read_to_string(entry.path().join("name"))
+                    .is_ok_and(|value| value.trim() == name)
+            });
+        drop(injector);
+        assert!(registered, "虚拟设备应该出现在 /sys/class/input 里");
     }
 }
