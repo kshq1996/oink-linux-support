@@ -5,15 +5,22 @@
 # unpacked on the workstation and copied over the installed ones. The package
 # itself stays the source of truth for the file list.
 #
-# Usage: tools/linux/deploy-device.sh <arch: x64|arm64> [host]
+# Usage: tools/linux/deploy-device.sh <arch: x64|arm64> <host>
 set -euo pipefail
 
-ARCH=${1:-x64}
-HOST=${2:-kangshaoqi@192.168.22.55}
-VERSION=$(python3 -c "import json;print(json.load(open('packaging/identity.json'))['version'])")
+ARCH=${1:-}
+HOST=${2:-}
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+VERSION=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$ROOT/packaging/identity.json")
 REPO=${OINK_REPO:-kshq1996/oink-linux-support}
 WORK=${WORK:-/tmp/oink-deploy-$ARCH}
-IMAGE=${OINK_LINUX_IMAGE:-oink-linux-build:0.3.6-arm64}
+source "$ROOT/tools/linux/image.sh"
+IMAGE=${OINK_LINUX_IMAGE:-${IMAGE_PREFIX}-arm64}
+
+if [[ -z "$ARCH" || -z "$HOST" ]]; then
+    echo "usage: $0 <arch: x64|arm64> <host>" >&2
+    exit 2
+fi
 
 case "$ARCH" in
 x64|arm64) ;;

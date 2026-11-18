@@ -143,11 +143,16 @@ pub(crate) fn open_devices() -> Vec<Device> {
             continue;
         }
         let name = device_name(fd);
-        let pointer = bit_set(&types, EV_REL)
+        // 手柄也会报相对位移和按键：内核把摇杆当成鼠标（`REL_X`/`REL_Y`），
+        // 把按键当成鼠标左键（`BTN_LEFT`）。不排除的话，摇杆一动共享指针就跳。
+        // 手柄的按键不参与键盘角色，所以只关掉指针和按键两个角色。
+        let gamepad = is_gamepad(&name);
+        let pointer = !gamepad
+            && bit_set(&types, EV_REL)
             && bit_set(&capability_bits(fd, EV_REL as u8, 8), REL_X)
             && bit_set(&capability_bits(fd, EV_REL as u8, 8), REL_Y);
         let keys = capability_bits(fd, EV_KEY as u8, 128);
-        let buttons = bit_set(&keys, BTN_LEFT);
+        let buttons = !gamepad && bit_set(&keys, BTN_LEFT);
         let keyboard = bit_set(&keys, KEY_A);
         devices.push(Device {
             file,
@@ -160,6 +165,28 @@ pub(crate) fn open_devices() -> Vec<Device> {
         });
     }
     devices
+}
+
+/// 设备名看起来像手柄吗？
+///
+/// 内核不区分手柄节点和鼠标节点：同一个手柄会同时开出 `js0`（摇杆）、`event*`
+/// （按键）和一个鼠标节点（摇杆当鼠标用）。udev 的 `ID_INPUT_JOYSTICK` 帮不上忙，
+/// 手柄的鼠标节点在 udev 里就标着 `ID_INPUT_MOUSE=1`，只能按名字排除。
+fn is_gamepad(name: &str) -> bool {
+    let name = name.to_lowercase();
+    [
+        "controller",
+        "gamepad",
+        "joystick",
+        "xbox",
+        "playstation",
+        "dualsense",
+        "dualshock",
+        "8bitdo",
+        "nacon",
+    ]
+    .iter()
+    .any(|marker| name.contains(marker))
 }
 
 /// 读设备的能力位图。
@@ -237,5 +264,17 @@ mod tests {
                 value: 1
             }
         );
+    }
+
+    #[test]
+    fn a_gamepad_is_not_mistaken_for_a_mouse() {
+        // 手柄的鼠标节点：内核给它开 `REL_X`/`REL_Y` 和 `BTN_LEFT`。
+        assert!(is_gamepad("Xbox360 Controller for Windows Mouse"));
+        assert!(is_gamepad("Sony Interactive Entertainment Wireless Controller"));
+        assert!(is_gamepad("8BitDo Ultimate Wireless"));
+        // 真鼠标和键盘不能被误伤。
+        assert!(!is_gamepad("InputPlumber Mouse"));
+        assert!(!is_gamepad("AT Translated Set 2 keyboard"));
+        assert!(!is_gamepad(""));
     }
 }
