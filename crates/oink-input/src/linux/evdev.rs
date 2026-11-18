@@ -76,6 +76,9 @@ pub(crate) struct Device {
     pub(crate) buttons: bool,
     /// 这台设备会报键盘按键。
     pub(crate) keyboard: bool,
+    /// 这是手柄的指针节点：桌面（libinput）可能把它当鼠标用，
+    /// 摇杆一动光标就跟着动。截获不用它，但远端接管指针时要独占它。
+    pub(crate) gamepad_pointer: bool,
     /// 每逻辑像素对应多少设备计数。
     pub(crate) counts_per_pixel: f64,
 }
@@ -143,23 +146,25 @@ pub(crate) fn open_devices() -> Vec<Device> {
             continue;
         }
         let name = device_name(fd);
-        // 手柄也会报相对位移和按键：内核把摇杆当成鼠标（`REL_X`/`REL_Y`），
-        // 把按键当成鼠标左键（`BTN_LEFT`）。不排除的话，摇杆一动共享指针就跳。
-        // 手柄的按键不参与键盘角色，所以只关掉指针和按键两个角色。
-        let gamepad = is_gamepad(&name);
-        let pointer = !gamepad
-            && bit_set(&types, EV_REL)
-            && bit_set(&capability_bits(fd, EV_REL as u8, 8), REL_X)
-            && bit_set(&capability_bits(fd, EV_REL as u8, 8), REL_Y);
+        let rel = capability_bits(fd, EV_REL as u8, 8);
+        let reports_motion =
+            bit_set(&types, EV_REL) && bit_set(&rel, REL_X) && bit_set(&rel, REL_Y);
         let keys = capability_bits(fd, EV_KEY as u8, 128);
-        let buttons = !gamepad && bit_set(&keys, BTN_LEFT);
-        let keyboard = bit_set(&keys, KEY_A);
+        let roles = classify(
+            &name,
+            reports_motion,
+            bit_set(&keys, BTN_LEFT),
+            bit_set(&keys, KEY_A),
+        );
         devices.push(Device {
             file,
             name,
-            pointer,
-            buttons,
-            keyboard,
+            pointer: roles.pointer,
+            buttons: roles.buttons,
+            keyboard: roles.keyboard,
+            // 手柄的指针节点：截获不碰它，但要留着它的文件描述符，
+            // 远端接管指针时用它独占设备（见 [`grab`]）。
+            gamepad_pointer: roles.gamepad_pointer,
             // 设备计数换算成逻辑像素的系数（鼠标的 DPI 决定）。
             counts_per_pixel: scale::counts_per_pixel(&path),
         });
@@ -184,9 +189,61 @@ fn is_gamepad(name: &str) -> bool {
         "dualshock",
         "8bitdo",
         "nacon",
+        // SteamOS 的 InputPlumber 把手柄的摇杆做成一个虚拟鼠标，
+        // 它在 udev 里就是一个普通鼠标（`ID_INPUT_MOUSE=1`）。
+        "inputplumber",
     ]
     .iter()
     .any(|marker| name.contains(marker))
+}
+/// 一台设备在截获里扮演的角色。
+struct Roles {
+    /// 指针（相对位移）。
+    pointer: bool,
+    /// 鼠标键。
+    buttons: bool,
+    /// 键盘按键。
+    keyboard: bool,
+    /// 手柄的指针节点：桌面可能把它当鼠标用，截获不用它，但要能独占它。
+    gamepad_pointer: bool,
+}
+
+/// 一台设备在截获里扮演什么角色。
+///
+/// 手柄的节点不参与截获：内核把摇杆开成鼠标节点（`REL_X`/`REL_Y`），
+/// 把按键开成键盘节点（`KEY_A`）。不排除的话，摇杆一动共享指针就跳，
+/// 手柄的按键还会变成发给对端的按键。
+fn classify(name: &str, reports_motion: bool, left_button: bool, key_a: bool) -> Roles {
+    let gamepad = is_gamepad(name);
+    Roles {
+        pointer: !gamepad && reports_motion,
+        buttons: !gamepad && left_button,
+        keyboard: !gamepad && key_a,
+        gamepad_pointer: gamepad && reports_motion,
+    }
+}
+
+
+/// 独占一台输入设备：别的读者（合成器）再也收不到它的事件。
+///
+/// `EVIOCGRAB` 是设备级的：内核只把事件送给抓着它的这个描述符。
+/// 参数是 `int`：1 独占，0 放开。
+///
+/// 手柄的指针节点被桌面当成鼠标时，摇杆会和注入的指针拉扯，
+/// 光标像是被摇杆拖回原处。远端接管指针期间要独占这些节点。
+pub(crate) fn grab(device: &Device, on: bool) -> bool {
+    let value: libc::c_int = i32::from(on);
+    let request = ioc(IOC_WRITE, EVDEV, 0x90, std::mem::size_of::<libc::c_int>() as u32);
+    // SAFETY: `device` holds an open evdev file descriptor; the ioctl reads an
+    // `int` from the pointer we pass, and that int outlives the call.
+    let result = unsafe {
+        libc::ioctl(
+            device.file.as_raw_fd(),
+            request,
+            &value as *const libc::c_int as *mut libc::c_void,
+        )
+    };
+    result >= 0
 }
 
 /// 读设备的能力位图。
@@ -229,9 +286,10 @@ const fn ioc(direction: u32, kind: u8, number: u8, size: u32) -> libc::c_ulong {
 
 /// `IOC_READ`。
 const IOC_READ: u32 = 2;
+/// `IOC_WRITE`。
+const IOC_WRITE: u32 = 1;
 /// `ioctl` 的类型：输入设备。
 const EVDEV: u8 = b'E';
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -272,9 +330,47 @@ mod tests {
         assert!(is_gamepad("Xbox360 Controller for Windows Mouse"));
         assert!(is_gamepad("Sony Interactive Entertainment Wireless Controller"));
         assert!(is_gamepad("8BitDo Ultimate Wireless"));
+        // SteamOS 的 InputPlumber 把摇杆做成一个虚拟鼠标。
+        assert!(is_gamepad("InputPlumber Mouse"));
         // 真鼠标和键盘不能被误伤。
-        assert!(!is_gamepad("InputPlumber Mouse"));
         assert!(!is_gamepad("AT Translated Set 2 keyboard"));
         assert!(!is_gamepad(""));
+    }
+
+    #[test]
+    fn a_gamepad_node_takes_no_role_in_the_capture() {
+        // 手柄的鼠标节点：相对位移 + 鼠标左键，都不参与截获，
+        // 但要标成手柄指针，桌面才拿不到它。
+        let roles = classify("Xbox360 Controller for Windows Mouse", true, true, false);
+        assert!(!roles.pointer);
+        assert!(!roles.buttons);
+        assert!(!roles.keyboard);
+        assert!(roles.gamepad_pointer);
+
+        // 手柄的键盘节点：内核给它开 `KEY_A`（手柄按键），
+        // 那不能变成发给对端的键盘按键。
+        let roles = classify("Xbox360 Controller for Windows Keyboard", false, false, true);
+        assert!(!roles.pointer);
+        assert!(!roles.buttons);
+        assert!(!roles.keyboard);
+        assert!(!roles.gamepad_pointer);
+
+        // SteamOS 的虚拟鼠标（摇杆）。
+        let roles = classify("InputPlumber Mouse", true, true, false);
+        assert!(!roles.pointer);
+        assert!(roles.gamepad_pointer);
+    }
+
+    #[test]
+    fn a_real_mouse_and_keyboard_keep_their_roles() {
+        let roles = classify("Logitech USB Mouse", true, true, false);
+        assert!(roles.pointer);
+        assert!(roles.buttons);
+        assert!(!roles.keyboard);
+        assert!(!roles.gamepad_pointer);
+
+        let roles = classify("AT Translated Set 2 keyboard", false, false, true);
+        assert!(roles.keyboard);
+        assert!(!roles.pointer);
     }
 }
