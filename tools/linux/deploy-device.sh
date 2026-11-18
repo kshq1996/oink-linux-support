@@ -16,8 +16,7 @@ WORK=${WORK:-/tmp/oink-deploy-$ARCH}
 IMAGE=${OINK_LINUX_IMAGE:-oink-linux-build:0.3.6-arm64}
 
 case "$ARCH" in
-x64) PLATFORM=linux/amd64 ;;
-arm64) PLATFORM=linux/arm64 ;;
+x64|arm64) ;;
 *) echo "unknown architecture: $ARCH" >&2; exit 2 ;;
 esac
 
@@ -30,12 +29,12 @@ gh release download "v$VERSION" --repo "$REPO" \
     --pattern "Oink-$VERSION-linux-$ARCH.rpm" --clobber
 
 echo "Unpacking the package"
-docker run --rm --platform "$PLATFORM" -v "$WORK:/work" --entrypoint sh "$IMAGE" \
+docker run --rm -v "$WORK:/work" --entrypoint sh "$IMAGE" \
     -c "rpm2cpio /work/Oink-$VERSION-linux-$ARCH.rpm > /work/package.cpio"
 tar -xf package.cpio -C pkg
 
 echo "Copying the binaries to $HOST"
 scp -q pkg/opt/oink/oink pkg/opt/oink/oink-agent pkg/opt/oink/oink-backend "$HOST:/tmp/"
-ssh "$HOST" 'sudo cp /tmp/oink /tmp/oink-agent /tmp/oink-backend /opt/oink/ && sudo chmod 0755 /opt/oink/oink /opt/oink/oink-agent /opt/oink/oink-backend && rm -f /tmp/oink /tmp/oink-agent /tmp/oink-backend && /opt/oink/oink-backend --version 2>&1 | head -2'
+ssh "$HOST" 'sudo cp /tmp/oink /tmp/oink-agent /tmp/oink-backend /opt/oink/ && sudo chmod 0755 /opt/oink/oink /opt/oink/oink-agent /opt/oink/oink-backend && rm -f /tmp/oink /tmp/oink-agent /tmp/oink-backend'
 
 echo "Deployed Oink $VERSION ($ARCH) to $HOST"
