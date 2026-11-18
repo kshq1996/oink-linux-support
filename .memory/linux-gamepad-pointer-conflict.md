@@ -22,8 +22,10 @@ Facts found while fixing the pointer on the Bazzite handheld (2026-11-18):
   the pointer role turns the gamepad's buttons into keyboard keys for the peer.
 - **The session's input nodes have no `uaccess` ACL** (the controller was plugged in before the
   session started), so a plain user process cannot open `event2`/`event5`/`event18`. The
-  compositor reads them through the file descriptors systemd passes it. A udev rule
-  `SUBSYSTEM=="input", ENV{ID_INPUT}=="1", TAG+="uaccess"` gives the seat user that access.
+  compositor reads them through the file descriptors systemd passes it. The rule the package
+  installs is `SUBSYSTEM=="input", KERNEL=="event*", TAG+="uaccess"`, and it has to be installed
+  as `65-oink-input.rules`: systemd runs the `uaccess` builtin from `73-seat-late.rules`, so a
+  `99-` file would set the tag too late and the access right would never be granted.
 - **A Wayland session needs the environment of the desktop session.** Running the UI with the
   environment exported from `/proc/<plasmashell>/environ` still fails ("Failed to initialize
   GTK"); `systemd-run --user --unit=... <ui>` works, because the user manager carries the
