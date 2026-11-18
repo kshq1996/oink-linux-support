@@ -596,8 +596,13 @@ fn motion_event(inner: &Arc<Inner>, motion: (f64, f64), started: Instant) -> Opt
     let size = desktop_size(inner);
     let (remote, park) = {
         let mut state = lock(&inner.state);
-        state.cursor = clamp_to_desktop(Point::new(state.cursor.x + motion.0, state.cursor.y + motion.1), size);
-        (matches!(state.mode, CaptureMode::Remote { .. }), state.park)
+        if matches!(state.mode, CaptureMode::Remote { .. }) {
+            // `Remote` 模式：本机指针停在停靠点，记住的位置也就是停靠点。
+            (true, state.park)
+        } else {
+            state.cursor = clamp_to_desktop(Point::new(state.cursor.x + motion.0, state.cursor.y + motion.1), size);
+            (false, None)
+        }
     };
     let cursor = current_cursor(inner);
     if remote {
