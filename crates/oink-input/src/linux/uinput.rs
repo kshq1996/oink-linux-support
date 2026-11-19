@@ -12,6 +12,7 @@
 //! - 键盘与鼠标键用内核键码（`KEY_*`、`BTN_*`），见 [`super::keycodes`]。
 
 use std::os::fd::{AsRawFd, RawFd};
+use std::sync::Mutex;
 
 use oink_foundation::Point;
 use oink_foundation::input::{KeyCode, MouseButton, ScrollUnit};
@@ -19,6 +20,7 @@ use oink_foundation::input::{KeyCode, MouseButton, ScrollUnit};
 use crate::InputError;
 use crate::linux::keycodes;
 use crate::linux::keymap;
+use crate::linux::lock;
 use crate::linux::scale::WHEEL_DETENT;
 
 // 内核的事件类型与代码（`include/uapi/linux/input-event-codes.h`）。
@@ -44,6 +46,16 @@ const INPUT_PROP_DIRECT: i32 = 0x01;
 const fn ioc(direction: u32, kind: u8, number: u8, size: u32) -> libc::c_ulong {
     ((direction << 30) | (size << 16) | ((kind as u32) << 8) | (number as u32)) as libc::c_ulong
 }
+
+/// 滚轮的一个轴。
+#[derive(Clone, Copy)]
+enum ScrollAxis {
+    Vertical,
+    Horizontal,
+}
+
+/// 单次注入的滚轮上限：64 格（内核单位是 1/120 格）。
+const MAX_WHEEL_UNITS: i64 = 64 * 120;
 
 const IOC_NONE: u32 = 0;
 const IOC_WRITE: u32 = 1;
@@ -105,6 +117,8 @@ pub(crate) struct Injector {
     fd: RawFd,
     /// 设备的绝对范围：桌面的像素尺寸。
     range: (u16, u16),
+    /// 滚轮零头：竖直、水平各一份，单位是 1/120 格。
+    scroll_remainder: Mutex<(f64, f64)>,
 }
 
 impl Injector {
@@ -124,7 +138,11 @@ impl Injector {
         if fd < 0 {
             return Err(InputError::Platform(format!("打开 /dev/uinput 失败：{}", last_error())));
         }
-        let injector = Self { fd, range: size };
+        let injector = Self {
+            fd,
+            range: size,
+            scroll_remainder: Mutex::new((0.0, 0.0)),
+        };
         match injector.setup(name, size) {
             Ok(()) => Ok(injector),
             Err(error) => Err(error),
@@ -232,9 +250,11 @@ impl Injector {
     pub(crate) fn scroll(&self, dx: f64, dy: f64, unit: ScrollUnit) -> Result<(), InputError> {
         let (horizontal, vertical) = keymap::scroll_notches(dx, dy, unit);
         let mut events = Vec::new();
-        // 内核的滚轮单位是 1/120 格：120 才是完整的一格。
-        let vertical_steps = notch_steps(vertical) * WHEEL_DETENT;
-        let horizontal_steps = notch_steps(horizontal) * WHEEL_DETENT;
+        // 内核的滚轮单位是 1/120 格：120 才是完整的一格。小数滚轮按 1/120 保留，
+        // 不足 1/120 的零头留到下次：四舍五入成整格会把触摸板的一小段滑动放大成
+        // 一整格，滚动因此快好几倍（Windows 端就是按小数注入的）。
+        let vertical_steps = self.scroll_units(ScrollAxis::Vertical, vertical);
+        let horizontal_steps = self.scroll_units(ScrollAxis::Horizontal, horizontal);
         if vertical_steps != 0 {
             events.push(event(EV_REL, REL_WHEEL, vertical_steps));
         }
@@ -246,6 +266,16 @@ impl Injector {
         }
         events.push(event(EV_SYN, SYN_REPORT, 0));
         self.write_events(&events)
+    }
+
+    /// 滚轮量 → 内核的 1/120 格单位；不足 1/120 的零头留到下次。
+    fn scroll_units(&self, axis: ScrollAxis, notches: f64) -> i32 {
+        let mut remainder = lock(&self.scroll_remainder);
+        let slot = match axis {
+            ScrollAxis::Vertical => &mut remainder.0,
+            ScrollAxis::Horizontal => &mut remainder.1,
+        };
+        wheel_units(slot, notches) as i32
     }
 
     /// 写一批事件。
@@ -326,13 +356,10 @@ impl Injector {
     }
 }
 
-/// 滚动量换算成格数：小数滚轮四舍五入，非零值至少一格。
-fn notch_steps(value: f64) -> i32 {
-    if value == 0.0 {
-        return 0;
-    }
-    let steps = value.abs().round().clamp(1.0, 64.0) as i32;
-    if value > 0.0 { steps } else { -steps }
+/// 滚轮量 → 内核的 1/120 格单位；不足 1/120 的零头留在 `remainder` 里。
+fn wheel_units(remainder: &mut f64, notches: f64) -> i64 {
+    let units = keymap::take_whole(remainder, notches * f64::from(WHEEL_DETENT));
+    units.clamp(-MAX_WHEEL_UNITS, MAX_WHEEL_UNITS)
 }
 
 impl AsRawFd for Injector {
@@ -405,6 +432,24 @@ mod tests {
         // `struct uinput_abs_setup`：`code` + 填充 + `struct input_absinfo`。
         assert_eq!(std::mem::size_of::<UinputAbsSetup>(), 28);
         assert_eq!(std::mem::size_of::<UinputSetup>(), 92);
+    }
+
+    #[test]
+    fn fractional_scroll_keeps_the_kernel_precision() {
+        // 触摸板的一小段滑动不到一格：按 1/120 保留，不能放大成整格。
+        let mut remainder = 0.0;
+        assert_eq!(wheel_units(&mut remainder, 0.4), 48);
+        assert_eq!(wheel_units(&mut remainder, 0.4), 48);
+        // 0.41 格 = 49.2 个计数：不足一个计数的零头留到下次。
+        let mut remainder = 0.0;
+        assert_eq!(wheel_units(&mut remainder, 0.41), 49);
+        assert!((remainder - 0.2).abs() < 1e-5, "remainder = {remainder}");
+        assert_eq!(wheel_units(&mut remainder, 0.41), 49);
+        assert!((remainder - 0.4).abs() < 1e-5, "remainder = {remainder}");
+        // 整格滚轮仍然是 120 个计数。
+        let mut remainder = 0.0;
+        assert_eq!(wheel_units(&mut remainder, 1.0), 120);
+        assert_eq!(wheel_units(&mut remainder, -1.0), -120);
     }
 
     #[test]

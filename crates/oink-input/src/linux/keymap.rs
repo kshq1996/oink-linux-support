@@ -418,19 +418,22 @@ pub(crate) fn x11_button(button: MouseButton) -> u8 {
 }
 
 /// 像素 → 滚轮格数的换算：与 Windows 端一致（`100/3` 像素一行，每格 3 行）。
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const PIXELS_PER_LINE: f64 = 100.0 / 3.0;
 /// X11 每格滚轮的行数，与 [`crate::FeelProfile::wheel_lines_per_notch`] 一致。
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const LINES_PER_NOTCH: f64 = 3.0;
 /// 单次注入最多发出的滚轮格数，避免异常大的滚动量刷爆事件队列。
 const MAX_NOTCHES: u32 = 64;
 
-/// 滚动量 → X11 滚轮按钮序列（每一格一个按钮，注入时按下后立刻抬起）。
+/// 整格滚动量 → X11 滚轮按钮序列（每一格一个按钮，注入时按下后立刻抬起）。
 ///
 /// 方向：`dy > 0`（视图向文档顶部移动，即传统滚轮向上）→ 按钮 4，`dy < 0` → 按钮 5；
 /// `dx > 0` → 按钮 7，`dx < 0` → 按钮 6。
+///
+/// X11 的滚轮按钮只有整格：小数滚轮的零头由调用方累积，这里只发整格。
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub(crate) fn scroll_buttons(dx: f64, dy: f64, unit: ScrollUnit) -> Vec<u8> {
-    let (dx, dy) = scroll_notches(dx, dy, unit);
+pub(crate) fn notch_buttons(dx: f64, dy: f64) -> Vec<u8> {
     let mut buttons = Vec::new();
     push_notches(&mut buttons, dy, WHEEL_UP, WHEEL_DOWN);
     push_notches(&mut buttons, dx, WHEEL_RIGHT, WHEEL_LEFT);
@@ -440,6 +443,7 @@ pub(crate) fn scroll_buttons(dx: f64, dy: f64, unit: ScrollUnit) -> Vec<u8> {
 /// 滚动量 → 格数（可带小数）。
 ///
 /// 像素单位按 `100/3` 像素一行、每格 3 行换算；行单位直接当格数用。
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn scroll_notches(dx: f64, dy: f64, unit: ScrollUnit) -> (f64, f64) {
     match unit {
         ScrollUnit::Line => (dx, dy),
@@ -450,15 +454,34 @@ pub(crate) fn scroll_notches(dx: f64, dy: f64, unit: ScrollUnit) -> (f64, f64) {
     }
 }
 
-/// 把一个方向的滚动量换算成若干个滚轮按钮。
+/// 把一个方向的整格滚动量换算成若干个滚轮按钮。
 fn push_notches(buttons: &mut Vec<u8>, value: f64, positive: u8, negative: u8) {
     if value == 0.0 {
         return;
     }
-    // 小数滚轮（高精度滚轮）四舍五入；非零值至少发一格。
-    let steps = value.abs().round().max(1.0).min(f64::from(MAX_NOTCHES)) as u32;
+    let steps = value.abs().floor().min(f64::from(MAX_NOTCHES)) as u32;
+    if steps == 0 {
+        return;
+    }
     let button = if value > 0.0 { positive } else { negative };
     buttons.extend(std::iter::repeat_n(button, steps as usize));
+}
+
+/// 累积小数部分，返回本次应发出的整数单位；零头留到下次。
+///
+/// 正负方向各自累积：方向反转时零头不互相抵消。
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn take_whole(remainder: &mut f64, add: f64) -> i64 {
+    // 容差：0.3 / 3 * 120 = 11.999999999999998 这类浮点误差不能让一个单位永远留在余数里
+    const EPS: f64 = 1e-6;
+    *remainder += add;
+    let whole = if *remainder >= 0.0 {
+        (*remainder + EPS).floor()
+    } else {
+        (*remainder - EPS).ceil()
+    };
+    *remainder -= whole;
+    whole as i64
 }
 
 #[cfg(test)]
@@ -592,24 +615,42 @@ mod tests {
 
     #[test]
     fn scroll_maps_to_wheel_buttons() {
-        assert_eq!(scroll_buttons(0.0, 1.0, ScrollUnit::Line), vec![WHEEL_UP]);
-        assert_eq!(scroll_buttons(0.0, -1.0, ScrollUnit::Line), vec![WHEEL_DOWN]);
-        assert_eq!(scroll_buttons(1.0, 0.0, ScrollUnit::Line), vec![WHEEL_RIGHT]);
-        assert_eq!(scroll_buttons(-1.0, 0.0, ScrollUnit::Line), vec![WHEEL_LEFT]);
-        assert_eq!(scroll_buttons(0.0, 0.0, ScrollUnit::Line), Vec::<u8>::new());
-        // 小数滚轮四舍五入，非零至少一格。
-        assert_eq!(scroll_buttons(0.0, 0.4, ScrollUnit::Line), vec![WHEEL_UP]);
-        assert_eq!(scroll_buttons(0.0, 2.4, ScrollUnit::Line), vec![WHEEL_UP, WHEEL_UP]);
-        assert_eq!(
-            scroll_buttons(0.0, -2.6, ScrollUnit::Line),
-            vec![WHEEL_DOWN, WHEEL_DOWN, WHEEL_DOWN]
-        );
+        assert_eq!(notch_buttons(0.0, 1.0), vec![WHEEL_UP]);
+        assert_eq!(notch_buttons(0.0, -1.0), vec![WHEEL_DOWN]);
+        assert_eq!(notch_buttons(1.0, 0.0), vec![WHEEL_RIGHT]);
+        assert_eq!(notch_buttons(-1.0, 0.0), vec![WHEEL_LEFT]);
+        assert_eq!(notch_buttons(0.0, 0.0), Vec::<u8>::new());
+        // X11 的按钮只有整格：小数滚轮在调用方累积，这里不发零头。
+        assert_eq!(notch_buttons(0.0, 0.4), Vec::<u8>::new());
+        assert_eq!(notch_buttons(0.0, 2.4), vec![WHEEL_UP, WHEEL_UP]);
+        assert_eq!(notch_buttons(0.0, -2.6), vec![WHEEL_DOWN, WHEEL_DOWN]);
         // 纵向在前、横向在后。
-        assert_eq!(scroll_buttons(1.0, 1.0, ScrollUnit::Line), vec![WHEEL_UP, WHEEL_RIGHT]);
+        assert_eq!(notch_buttons(1.0, 1.0), vec![WHEEL_UP, WHEEL_RIGHT]);
+    }
+
+    #[test]
+    fn scroll_units_convert_to_notches() {
+        // 行单位直接当格数用。
+        assert_eq!(scroll_notches(0.0, 1.0, ScrollUnit::Line), (0.0, 1.0));
         // 像素单位按每格 100 像素换算。
-        assert_eq!(scroll_buttons(0.0, 100.0, ScrollUnit::Pixel), vec![WHEEL_UP]);
-        assert_eq!(scroll_buttons(0.0, 50.0, ScrollUnit::Pixel), vec![WHEEL_UP]);
-        assert_eq!(scroll_buttons(0.0, 0.0, ScrollUnit::Pixel), Vec::<u8>::new());
+        assert_eq!(scroll_notches(0.0, 100.0, ScrollUnit::Pixel), (0.0, 1.0));
+        assert_eq!(scroll_notches(0.0, 50.0, ScrollUnit::Pixel), (0.0, 0.5));
+        assert_eq!(scroll_notches(0.0, 0.0, ScrollUnit::Pixel), (0.0, 0.0));
+    }
+
+    #[test]
+    fn fractional_scroll_accumulates_into_whole_notches() {
+        // 零头留到下次：三次 0.4 格凑成一格，滚动量与来源一致。
+        let mut remainder = 0.0;
+        assert_eq!(take_whole(&mut remainder, 0.4), 0);
+        assert_eq!(take_whole(&mut remainder, 0.4), 0);
+        assert_eq!(take_whole(&mut remainder, 0.4), 1);
+        assert!((remainder - 0.2).abs() < 1e-9, "remainder = {remainder}");
+        // 负方向同样累积，零头不与正方向抵消。
+        let mut remainder = 0.0;
+        assert_eq!(take_whole(&mut remainder, -0.6), 0);
+        assert_eq!(take_whole(&mut remainder, -0.6), -1);
+        assert!((remainder + 0.2).abs() < 1e-9, "remainder = {remainder}");
     }
 
     #[test]

@@ -99,6 +99,8 @@ pub(crate) struct State {
     pub(crate) park: Option<(i16, i16)>,
     /// 自己注入、等待被截获线程过滤掉的事件。
     pub(crate) pending: VecDeque<Pending>,
+    /// 滚轮零头：竖直、水平各一份，单位是格。
+    pub(crate) scroll_remainder: (f64, f64),
 }
 
 impl Default for State {
@@ -109,6 +111,7 @@ impl Default for State {
             last_root: None,
             park: None,
             pending: VecDeque::new(),
+            scroll_remainder: (0.0, 0.0),
         }
     }
 }

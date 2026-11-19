@@ -78,6 +78,9 @@ Yes, but trackpads on Windows have not been tested.
 **Does it support clipboard sharing and drag and drop across operating systems?**\
 Yes. The clipboard is synced across devices automatically, and you can drag text, images and files directly from one device to another — even straight into apps such as Chrome.
 
+**The pointer moves faster on my small screen than on my large one — how do I make them feel the same?**\
+The layout gives every screen its physical size, so the same hand movement covers a larger share of a small screen than of a large one. Set the remote pointer speed of the smaller screen in the layout editor to the ratio of the two screens' widths: a 15-inch handheld screen needs about 0.43× the speed of a 27-inch screen. The remote pointer speed only applies while another device controls that screen, so the mouse and trackpad of the small screen keep their own speed.
+
 **Do I need to buy a license for personal or commercial use?**\
 No. Oink is free software released under GPL-3.0-only with additional terms, so you can use it for any personal or commercial purpose without asking for any further license. If you distribute Oink or a modified version of it, you must provide the complete source code under the same license, keep the original author attribution and license notices, and mark your changes; under the additional terms you also may not use the Oink name to promote derived products. Modifying Oink only for your own use, without distributing it, carries none of these obligations.
 

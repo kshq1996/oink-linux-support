@@ -96,8 +96,19 @@ fn key(inner: &Inner, code: KeyCode, pressed: bool) -> Result<(), InputError> {
 }
 
 /// 滚动：每一格滚轮是一个「按下后立刻抬起」的按钮对。
+///
+/// X11 的滚轮按钮只有整格：小数滚轮的零头留到下次，滚动量与来源一致
+/// （四舍五入成整格会把一小段滑动放大成整格，滚动因此快好几倍）。
 fn scroll(inner: &Inner, dx: f64, dy: f64, unit: ScrollUnit) -> Result<(), InputError> {
-    for number in keymap::scroll_buttons(dx, dy, unit) {
+    let (dx, dy) = keymap::scroll_notches(dx, dy, unit);
+    let (vertical, horizontal) = {
+        let mut state = lock(&inner.state);
+        (
+            keymap::take_whole(&mut state.scroll_remainder.0, dy),
+            keymap::take_whole(&mut state.scroll_remainder.1, dx),
+        )
+    };
+    for number in keymap::notch_buttons(horizontal as f64, vertical as f64) {
         let press = Pending::Button {
             button: number,
             pressed: true,
