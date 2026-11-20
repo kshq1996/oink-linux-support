@@ -27,6 +27,19 @@ Facts about building on the Bazzite handheld (the test device of this fork, 2026
   rpm-ostree install puts the packaged rule into the next deployment, which is a different
   thing).
 
+**The address depends on the corporate VPN (2026-11-21).** The handheld has an
+office-LAN address (`192.168.22.55`) and a corporate one (`10.204.96.191`); the
+latter is only reachable while the workstation holds an aTrust session
+(`/Applications/SSLVPN.app`, the gateway is `vpn.xyyl.com:65201`). When that
+session expired (`passportTokenInvalid` in
+`~/Library/Application Support/aTrust/logs/aTrustAgent_plugins_aTrustCore_h_e.log`),
+the workstation lost its `10.204.96.27` address, the route to `10.204.96.0/24`
+went with it, and the handheld became unreachable even though the office LAN
+(`192.168.0.0/16`, the workstation sits at `192.168.83.180`) was still up. A
+full sweep of that LAN finds no SSH host at all, so the handheld is not on it.
+Reaching the device therefore means re-authenticating the VPN, not waiting for
+the device.
+
 **Why:** the device looks like "the build is slow" and then like "the machine is broken",
 which sends the debugging in the wrong direction; the build script has to be written for a
 host that disappears and comes back with a different address.
