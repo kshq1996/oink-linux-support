@@ -49,3 +49,15 @@ the real distribution images (`docker run --platform linux/arm64 fedora:41`,
 `opensuse/tumbleweed`, `ubuntu:24.04`, `debian:13`), not only through the
 unit tests; check that the program starts, not only that the package manager
 is happy. See also [[linux-test-suite]] and [[linux-release-platform-set]].
+
+**The release slot carries the build sequence (2026-11-21).** `packaging/linux/build.py`
+derives the RPM `Release` and the Debian `Revision` from the build number
+(`decode_build(build)[1]`), not from a fixed `1`. The build states the version it
+packages, so the label and the build cannot disagree (`package_release` raises when they
+do). A rebuilt package therefore sorts above the package it replaces: the published
+v0.3.6 was `0.3.6-1` (RPM) and `0.3.6` (DEB), and the republish with sequence 3 is
+`0.3.6-3` in both — `rpm-ostree` and `dpkg` accept it as an upgrade. Before this change
+a rebuilt package had the same version as the installed one and was refused as "already
+installed". The build script also takes the version from `release_version()`, like the
+macOS and Windows scripts, so the in-house label (`0.3.5-inhouse.N`) is consistent across
+the platforms.
