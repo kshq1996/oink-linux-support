@@ -69,9 +69,11 @@ reboot_into_the_new_deployment() {
     echo "Rebooting"
     ssh "$HOST" "sudo reboot" || true
 
-    # The device comes back on its own; wait until it answers again.
+    # The device comes back on its own; wait until it answers again. A
+    # reboot also restarts the device's own VPN client, so it can take a
+    # while before the corporate network carries it again.
     echo "Waiting for $HOST"
-    for _ in $(seq 1 60); do
+    for _ in $(seq 1 120); do
         sleep 5
         if ssh -o ConnectTimeout=5 "$HOST" true 2>/dev/null; then
             return 0
