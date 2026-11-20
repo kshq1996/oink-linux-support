@@ -120,10 +120,11 @@ def linux_status(package, record, private):
             if private:
                 assert private in (library / name).read_bytes()
         manifest = json.loads((library / 'report-manifest.json').read_text())
-        assert manifest['version'] == {'major': int(record['version'].split('.')[0]),
-                                       'minor': int(record['version'].split('.')[1]),
-                                       'patch': int(record['version'].split('.')[2]),
-                                       'build': record['build']}
+        # The label may carry an in-house marker; the manifest counts the
+        # numeric core, exactly like the manifest writer.
+        major, minor, patch = map(int, record['version'].split('-')[0].split('.'))
+        assert manifest['version'] == {'major': major, 'minor': minor,
+                                       'patch': patch, 'build': record['build']}
         assert {image['slot'] for image in manifest['images']} == {'agent', 'ui_rust'}
         assert all(len(image['debug_id']) == 16 for image in manifest['images'])
         with tempfile.TemporaryDirectory() as home:

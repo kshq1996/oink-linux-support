@@ -26,9 +26,25 @@ from rpm import build as build_rpm_package
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'build-support'))
 from identity import IDENTITY as I
 from identity import artifact_stem
+from identity import decode_build
 from payload import copy_notices
 from provenance import digest
 from report_manifest import write_manifest
+from versioning import release_version
+
+
+def package_release(version, build):
+    """The version and the release slot the package managers compare.
+
+    A rebuilt package has to sort above the package it replaces, so the
+    release slot carries the sequence of the build. The build states the
+    version it packages, so the label and the build cannot disagree.
+    """
+    base = version.split('-')[0]
+    packaged, sequence = decode_build(build)
+    if packaged != base:
+        raise RuntimeError(f'build {build} packages {packaged}, not {base}')
+    return base, str(sequence)
 
 ROOT = Path(__file__).resolve().parents[2]
 # The installed tree is a Linux filesystem tree: its paths are POSIX, whatever
@@ -217,24 +233,23 @@ def stage(root, binaries, notes_file, record):
     record['report_manifest'] = report
 
 
-def debian_version(version):
-    """A Debian version keeps the display version; the suffix is the revision."""
-    if version.count('-') > 1:
-        raise RuntimeError(f'unsupported package version: {version}')
-    return version
+def debian_version(version, build):
+    """A Debian version: the display version and the release as the revision."""
+    base, release = package_release(version, build)
+    return f'{base}-{release}'
 
 
-def rpm_version(version):
-    """RPM splits the version from the release and rejects a hyphen in the version."""
-    base, _, suffix = version.partition('-')
-    return base, suffix or '1'
+def rpm_version(version, build):
+    """RPM splits the version from the release."""
+    base, release = package_release(version, build)
+    return base, release
 
 
-def debian_control(version, arch, glibc=GLIBC_MINIMUM):
+def debian_control(version, build, arch, glibc=GLIBC_MINIMUM):
     """The control file of the Debian package."""
     return '\n'.join([
         'Package: oink',
-        f'Version: {debian_version(version)}',
+        f'Version: {debian_version(version, build)}',
         f'Architecture: {DEBIAN_ARCHITECTURES[arch]}',
         f'Maintainer: {I["publisher"]}',
         'Section: utils',
@@ -257,15 +272,15 @@ def debian_md5sums(root):
     return '\n'.join(lines) + '\n'
 
 
-def build_deb(root, output, version, arch, glibc=GLIBC_MINIMUM):
+def build_deb(root, output, version, build, arch, glibc=GLIBC_MINIMUM):
     """Write the Debian package for the staged tree."""
     name = output / f'{artifact_stem(version, "linux", arch)}.deb'
-    return build_deb_package(root, name, debian_control(version, arch, glibc), debian_md5sums(root))
+    return build_deb_package(root, name, debian_control(version, build, arch, glibc), debian_md5sums(root))
 
 
-def build_rpm(root, output, version, arch):
+def build_rpm(root, output, version, build, arch):
     """Write the RPM package for the staged tree."""
-    base, release = rpm_version(version)
+    base, release = rpm_version(version, build)
     name = output / f'{artifact_stem(version, "linux", arch)}.rpm'
     return build_rpm_package(root, name, name='oink', version=base, release=release,
                              arch=RPM_ARCHITECTURES[arch], summary=SUMMARY,
@@ -285,6 +300,12 @@ def main():
     p.add_argument('--source-tree-sha256', required=True)
     p.add_argument('--tool-cache', type=Path, help='Unused: the system dpkg and rpm build the packages')
     a = p.parse_args()
+    if a.version != I['version']:
+        p.error('version must match packaging/identity.json')
+    try:
+        a.version = release_version(a.version, a.source_commit, a.build)
+    except ValueError as error:
+        p.error(str(error))
     a.output.mkdir(parents=True, exist_ok=True)
     record = dict(schema=1, product=I['name'], provenance='source-tree',
                   source_tree_sha256=a.source_tree_sha256, version=a.version,
@@ -301,8 +322,8 @@ def main():
     stage(payload, a.binaries, a.update_notes_file, record)
     # Both packages are written from the same staging tree; neither writer
     # changes the tree, so the order only decides which file is listed first.
-    rpm = build_rpm(payload, a.output, a.version, a.arch)
-    deb = build_deb(payload, a.output, a.version, a.arch, glibc_minimum(a.binaries))
+    rpm = build_rpm(payload, a.output, a.version, a.build, a.arch)
+    deb = build_deb(payload, a.output, a.version, a.build, a.arch, glibc_minimum(a.binaries))
     record['artifacts'] = [{'name': f.name, 'size': f.stat().st_size, 'sha256': digest(f)} for f in (deb, rpm)]
     (a.output / 'release.json').write_text(json.dumps(record, indent=2) + '\n')
     (a.output / 'SHA256SUMS').write_text(''.join(f"{f['sha256']}  {f['name']}\n" for f in record['artifacts']))

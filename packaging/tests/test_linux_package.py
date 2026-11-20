@@ -13,6 +13,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'packaging/linux'), str(ROOT / 'build-support')]
+from identity import encode_build
 DEB_SPEC = importlib.util.spec_from_file_location('linux_deb', ROOT / 'packaging/linux/deb.py')
 DEB = importlib.util.module_from_spec(DEB_SPEC)
 DEB_SPEC.loader.exec_module(DEB)
@@ -21,7 +22,10 @@ RPM = importlib.util.module_from_spec(RPM_SPEC)
 RPM_SPEC.loader.exec_module(RPM)
 SPEC = importlib.util.spec_from_file_location('linux_build', ROOT / 'packaging/linux/build.py')
 B = importlib.util.module_from_spec(SPEC)
+
 SPEC.loader.exec_module(B)
+
+BUILD = encode_build(B.I['version'], 1)
 
 def ar_members(data):
     """The members of an ar archive: name and payload."""
@@ -80,7 +84,7 @@ class LinuxStaging(unittest.TestCase):
             path.chmod(0o755)
         record = {'schema': 1, 'product': B.I['name'], 'provenance': 'source-tree',
                   'source_tree_sha256': '0' * 64, 'version': B.I['version'],
-                  'source_commit': None, 'build': 1, 'platform': 'linux',
+                  'source_commit': None, 'build': BUILD, 'platform': 'linux',
                   'architecture': 'x64',
                   'components': [B.I['binaries'][role] for role in ('ui', 'agent', 'backend')],
                   'signing': 'unsigned'}
@@ -112,7 +116,7 @@ class LinuxStaging(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             payload, _ = self.stage(root)
-            name = B.build_deb(payload, root, B.I['version'], 'x64')
+            name = B.build_deb(payload, root, B.I['version'], BUILD, 'x64')
             members = ar_members(name.read_bytes())
             self.assertEqual(set(members), {'debian-binary', 'control.tar.gz', 'data.tar.gz'})
             self.assertEqual(members['debian-binary'], b'2.0\n')
@@ -124,7 +128,7 @@ class LinuxStaging(unittest.TestCase):
                 sums = archive.extractfile('./md5sums').read().decode()
             self.assertIn('Package: oink', text)
             self.assertIn('Architecture: amd64', text)
-            self.assertIn(f'Version: {B.I["version"]}', text)
+            self.assertIn(f'Version: {B.debian_version(B.I["version"], BUILD)}\n', text)
             self.assertIn('Depends: ', text)
             self.assertIn('libwebkit2gtk-4.1-0', text)
             self.assertIn(f'{B.INSTALL_DIRECTORY}/{B.I["binaries"]["ui"]}', sums)
@@ -142,7 +146,7 @@ class LinuxStaging(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             payload, _ = self.stage(root)
-            name = B.build_deb(payload, root, B.I['version'], 'x64')
+            name = B.build_deb(payload, root, B.I['version'], BUILD, 'x64')
             members = ar_members(name.read_bytes())
             with tarfile.open(fileobj=io.BytesIO(gzip.decompress(members['control.tar.gz'])), mode='r:') as archive:
                 text = archive.extractfile('./control').read().decode()
@@ -163,7 +167,7 @@ class LinuxStaging(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             payload, _ = self.stage(root)
-            name = B.build_deb(payload, root, B.I['version'], 'x64')
+            name = B.build_deb(payload, root, B.I['version'], BUILD, 'x64')
             members = ar_members(name.read_bytes())
             with tarfile.open(fileobj=io.BytesIO(gzip.decompress(members['data.tar.gz'])), mode='r:') as archive:
                 kinds = {member.name: member for member in archive.getmembers()}
@@ -225,7 +229,7 @@ class LinuxStaging(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             payload, _ = self.stage(root)
-            name = B.build_rpm(payload, root, B.I['version'], 'x64')
+            name = B.build_rpm(payload, root, B.I['version'], BUILD, 'x64')
             self.assertTrue(name.is_file())
             self.assertGreater(name.stat().st_size, 0)
 
@@ -250,7 +254,7 @@ class LinuxStaging(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             payload, _ = self.stage(root)
-            name = B.build_rpm(payload, root, B.I['version'], 'x64')
+            name = B.build_rpm(payload, root, B.I['version'], BUILD, 'x64')
             requires = subprocess.check_output(['rpm', '-qp', '--requires', str(name)], text=True)
         for line in requires.splitlines():
             requirement = line.strip()
@@ -298,15 +302,25 @@ class LinuxStaging(unittest.TestCase):
 
 
 class LinuxVersions(unittest.TestCase):
-    def test_debian_version_keeps_the_display_version(self):
-        self.assertEqual(B.debian_version('0.3.6'), '0.3.6')
-        self.assertEqual(B.debian_version('0.3.6-1'), '0.3.6-1')
-        with self.assertRaisesRegex(RuntimeError, 'unsupported package version'):
-            B.debian_version('0.3.6-1-2')
+    def test_the_release_slot_carries_the_build_sequence(self):
+        """A rebuilt package has to sort above the package it replaces.
 
-    def test_rpm_version_splits_the_release(self):
-        self.assertEqual(B.rpm_version('0.3.6'), ('0.3.6', '1'))
-        self.assertEqual(B.rpm_version('0.3.6-3'), ('0.3.6', '3'))
+        The package managers compare the version and the release slot, so
+        the slot carries the sequence of the build. The build states the
+        version it packages, so the label and the build cannot disagree.
+        """
+        build = encode_build(B.I['version'], 3)
+        self.assertEqual(B.debian_version(B.I['version'], build), f'{B.I["version"]}-3')
+        self.assertEqual(B.rpm_version(B.I['version'], build), (B.I['version'], '3'))
+
+    def test_a_later_build_sorts_above_an_earlier_one(self):
+        earlier = B.rpm_version(B.I['version'], encode_build(B.I['version'], 1))
+        later = B.rpm_version(B.I['version'], encode_build(B.I['version'], 2))
+        self.assertLess(int(earlier[1]), int(later[1]))
+
+    def test_the_version_must_match_the_build(self):
+        with self.assertRaisesRegex(RuntimeError, 'packages'):
+            B.package_release(B.I['version'], encode_build('0.3.5', 1))
 
     def test_architectures_match_the_package_managers(self):
         self.assertEqual(B.DEBIAN_ARCHITECTURES, {'x64': 'amd64', 'arm64': 'arm64'})
@@ -328,7 +342,7 @@ class LinuxPackaging(unittest.TestCase):
             output = root / 'output'
             command = [sys.executable, str(ROOT / 'packaging/linux/build.py'),
                        '--binaries', str(binaries), '--output', str(output), '--arch', 'x64',
-                       '--build', '1', '--source-tree-sha256', '0' * 64]
+                       '--build', str(BUILD), '--source-tree-sha256', '0' * 64]
             subprocess.run(command, check=True, capture_output=True)
             record = json.loads((output / 'release.json').read_text())
             self.assertEqual(record['platform'], 'linux')
