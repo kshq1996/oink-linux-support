@@ -54,4 +54,23 @@ The guard job then finds no release for the version and publishes the new
 build under the same tag. The published `release.json` carries the commit the
 assets were built from, so the tag of the replaced release moves to the new
 commit.
+
+**The republish of v0.3.6 (2026-11-21)**: the release was deleted, the fix was
+pushed, and the release was rebuilt with a **higher build sequence** (3): the
+workflow was started by hand (`workflow_dispatch` with `sequence: 3`), because
+the push trigger always builds sequence 1. The published assets are
+`Oink-0.3.6-linux-{x64,arm64}.{rpm,deb}` with the RPM release `3` and the
+Debian revision `3` (build `306003`), and the tag points at the commit the
+assets were built from. A push after the release exists is harmless: the
+guard job sees the release and skips the run.
+
+**The device installs the package with `rpm-ostree`**, not by copying the
+binaries: `tools/linux/deploy-device.sh <arch> <host> [--reboot]` downloads the
+published RPM, copies it over, runs `sudo rpm-ostree install`, reboots into
+the new deployment, refreshes the udev rules
+(`udevadm control --reload` + `udevadm trigger --subsystem-match=input
+--action=change`), drops the hand-made rule copies in `/etc/udev/rules.d` and
+registers the login item through the installed agent. `rpm-ostree` moves the
+package's `/opt/oink` to `/usr/lib/opt/oink`, so the installed binaries are
+there, not in `/opt/oink`.
 See also [[linux-platform-identity]].

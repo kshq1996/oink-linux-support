@@ -88,8 +88,21 @@ ssh "$HOST" 'sudo rm -f /etc/udev/rules.d/65-oink-input.rules /etc/udev/rules.d/
 # The login item has to name the installed interface program. The product
 # writes the entry itself, from the program it runs next to, so the entry is
 # registered through the installed agent rather than written by hand.
+#
+# The agent talks to the running backend, and the backend only runs once the
+# session is up (the interface program starts it), so the call is repeated
+# until it goes through.
 echo "Pointing the login item at the installed interface program"
-ssh "$HOST" '/usr/lib/opt/oink/oink-agent call set_launch_at_login "{\"enabled\":true}" || true'
+for _ in $(seq 1 40); do
+    if ssh "$HOST" bash -s <<'REMOTE'
+/usr/lib/opt/oink/oink-agent call set_launch_at_login '{"enabled":true}'
+REMOTE
+    then
+        break
+    fi
+    echo "The backend is not up yet; retrying."
+    sleep 15
+done
 ssh "$HOST" 'cat "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/oink.desktop"'
 
 echo "Deployed Oink $VERSION ($ARCH) to $HOST"
