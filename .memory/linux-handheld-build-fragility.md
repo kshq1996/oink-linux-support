@@ -40,6 +40,14 @@ full sweep of that LAN finds no SSH host at all, so the handheld is not on it.
 Reaching the device therefore means re-authenticating the VPN, not waiting for
 the device.
 
+**The peer machine can tell whether the device is alive.** `oink-agent call
+device_cards` (on macOS: `/Applications/Oink.app/Contents/MacOS/oink-agent`) lists every
+paired device with `connection.kind` and `lastSeenMs`. The handheld shows up under the
+name of its address (`192.168.22.55`, os `linux`); a device that is off shows `offline`
+and the epoch of its last sighting. On 2026-11-21 the linux peer had not been seen since
+2026-11-19 17:45 while two Windows peers had been seen that same night: the device
+itself was off or off-network, not merely unreachable over SSH.
+
 **Why:** the device looks like "the build is slow" and then like "the machine is broken",
 which sends the debugging in the wrong direction; the build script has to be written for a
 host that disappears and comes back with a different address.
