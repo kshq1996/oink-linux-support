@@ -77,12 +77,18 @@ pub(crate) struct Device {
     pub(crate) buttons: bool,
     /// 这台设备会报键盘按键。
     pub(crate) keyboard: bool,
-    /// 这台设备是桌面上会动光标的指针节点：手柄的摇杆节点、SteamOS 的
+    /// 桌面上会动光标的指针节点：手柄的摇杆节点、SteamOS 的
     /// 虚拟鼠标。截获不用它，但远端接管指针时要把它从桌面手里独占掉，
     /// 否则摇杆一动就把注入的指针拖回去。
     pub(crate) take_over: bool,
     /// 每逻辑像素对应多少设备计数。
     pub(crate) counts_per_pixel: f64,
+    /// 本进程是不是正独占着这台设备。
+    ///
+    /// 内核的独占是设备级的，而且只认参数的值：`EVIOCGRAB` 的实现是
+    /// `if (p) evdev_grab(...) else evdev_ungrab(...)`，`p` 就是 ioctl 的
+    /// 第三个参数。重复独占会回 EBUSY，所以状态要自己记着。
+    pub(crate) grabbed: bool,
 }
 
 impl Device {
@@ -173,6 +179,8 @@ pub(crate) fn open_devices() -> Vec<Device> {
             take_over: roles.take_over,
             // 设备计数换算成逻辑像素的系数（鼠标的 DPI 决定）。
             counts_per_pixel: scale::counts_per_pixel(&path),
+            // 一开始没有独占任何设备。
+            grabbed: false,
         });
     }
     devices
@@ -253,23 +261,45 @@ fn classify(name: &str, reports_motion: bool, left_button: bool, key_a: bool, vi
 /// 独占一台输入设备：别的读者（合成器）再也收不到它的事件。
 ///
 /// `EVIOCGRAB` 是设备级的：内核只把事件送给抓着它的这个描述符。
-/// 参数是 `int`：1 独占，0 放开。
+///
+/// 内核的实现是 `if (p) evdev_grab(...) else evdev_ungrab(...)`，
+/// 而 `p` **就是 ioctl 的第三个参数本身**（`drivers/input/evdev/evdev.c`
+/// 里的 `evdev_do_ioctl(file, cmd, (void __user *)arg, ...)`）：
+/// 非空是独占，空是放开。传指向 `int` 的指针的话，地址永远非空，
+/// "放开"就变成了"再次独占"，内核回 EBUSY，设备从此留在我们手里，
+/// 桌面再也拿不到它。参数要的是值本身：1 独占，0 放开。
 ///
 /// 手柄的指针节点被桌面当成鼠标时，摇杆会和注入的指针拉扯，
 /// 光标像是被摇杆拖回原处。远端接管指针期间要独占这些节点。
-pub(crate) fn grab(device: &Device, on: bool) -> bool {
-    let value: libc::c_int = i32::from(on);
+pub(crate) fn grab(device: &mut Device, on: bool) -> bool {
+    grab_with(device, on, |fd, request, argument| {
+        // SAFETY: `fd` 是一台打开着的 evdev 设备；`EVIOCGRAB` 只看参数的
+        // 值，不读它指向的内容。
+        unsafe { libc::ioctl(fd, request, argument) }
+    })
+}
+
+/// 独占（或放开）一台设备，`call` 是那一次 ioctl。
+///
+/// 拆出接缝是为了能测参数：独占是 1，放开是 0，而不是指针。
+fn grab_with(
+    device: &mut Device,
+    on: bool,
+    call: impl FnOnce(RawFd, libc::c_ulong, libc::c_ulong) -> libc::c_int,
+) -> bool {
+    // 已经是目标状态就不再问内核：重复独占会回 EBUSY，
+    // 而没抓过的设备也不该被"放开"（内核回 EINVAL）。
+    if device.grabbed == on {
+        return true;
+    }
     let request = ioc(IOC_WRITE, EVDEV, 0x90, std::mem::size_of::<libc::c_int>() as u32);
-    // SAFETY: `device` holds an open evdev file descriptor; the ioctl reads an
-    // `int` from the pointer we pass, and that int outlives the call.
-    let result = unsafe {
-        libc::ioctl(
-            device.file.as_raw_fd(),
-            request,
-            &value as *const libc::c_int as *mut libc::c_void,
-        )
-    };
-    result >= 0
+    let argument: libc::c_ulong = if on { 1 } else { 0 };
+    let result = call(device.file.as_raw_fd(), request, argument);
+    if result < 0 {
+        return false;
+    }
+    device.grabbed = on;
+    true
 }
 
 /// 读设备的能力位图。
@@ -426,5 +456,82 @@ mod tests {
         let roles = classify("AT Translated Set 2 keyboard", false, false, true, false);
         assert!(roles.keyboard);
         assert!(!roles.pointer);
+    }
+
+    /// 造一台设备：文件描述符用不到（ioctl 那一步被替身拦住了）。
+    fn a_device() -> Device {
+        Device {
+            file: File::open("/dev/null").expect("打开 /dev/null"),
+            name: "测试节点".to_string(),
+            pointer: false,
+            buttons: false,
+            keyboard: false,
+            take_over: true,
+            counts_per_pixel: 1.0,
+            grabbed: false,
+        }
+    }
+
+    #[test]
+    fn the_grab_argument_is_the_value_and_not_a_pointer() {
+        // 内核的 `EVIOCGRAB` 实现是 `if (p) evdev_grab(...) else evdev_ungrab(...)`，
+        // `p` 就是 ioctl 的第三个参数本身：非空是独占，空是放开。
+        // 传指向 `int` 的指针的话地址永远非空，"放开"就变成了"再次独占"，
+        // 内核回 EBUSY，设备从此留在我们手里，桌面再也拿不到它。
+        let mut device = a_device();
+        let mut seen = Vec::new();
+        let grabbed = grab_with(&mut device, true, |_fd, request, argument| {
+            seen.push((request, argument));
+            0
+        });
+        assert!(grabbed);
+        // 请求号是 `_IOW('E', 0x90, int)`，独占的参数是 1。
+        assert_eq!(seen, vec![(0x4004_4590, 1)]);
+        assert!(device.grabbed);
+
+        // 放开：参数必须是 0（空指针）。
+        let mut seen = Vec::new();
+        let released = grab_with(&mut device, false, |_fd, request, argument| {
+            seen.push((request, argument));
+            0
+        });
+        assert!(released);
+        assert_eq!(seen, vec![(0x4004_4590, 0)]);
+        assert!(!device.grabbed);
+    }
+
+    #[test]
+    fn a_device_is_not_grabbed_twice() {
+        // 重复独占会回 EBUSY，已经在目标状态时就不该再问内核。
+        let mut device = a_device();
+        let mut calls = 0;
+        let mut grab = |device: &mut Device| {
+            grab_with(device, true, |_fd, _request, _argument| {
+                calls += 1;
+                0
+            })
+        };
+        assert!(grab(&mut device));
+        assert!(grab(&mut device));
+        assert_eq!(calls, 1);
+
+        // 没抓过的设备也不该被"放开"：内核回 EINVAL。
+        let mut calls = 0;
+        let mut device = a_device();
+        let released = grab_with(&mut device, false, |_fd, _request, _argument| {
+            calls += 1;
+            0
+        });
+        assert!(released);
+        assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn a_failed_grab_is_not_remembered_as_held() {
+        // 内核拒绝了就不能当成抓着：否则后面"放开"会被跳过，设备留在我们手里。
+        let mut device = a_device();
+        let grabbed = grab_with(&mut device, true, |_fd, _request, _argument| -1);
+        assert!(!grabbed);
+        assert!(!device.grabbed);
     }
 }

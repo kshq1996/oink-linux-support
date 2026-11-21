@@ -322,9 +322,9 @@ fn move_relative(inner: &Arc<Inner>, dx: f64, dy: f64) -> Result<(), InputError>
 /// 远端接管指针期间独占这些节点，桌面就收不到它们的事件；
 /// 本地拿回指针时再放开。
 fn take_over_pointers(inner: &Arc<Inner>, take_over: bool) {
-    let devices = lock(&inner.take_over_devices);
+    let mut devices = lock(&inner.take_over_devices);
     let mut failed = Vec::new();
-    for device in devices.iter() {
+    for device in devices.iter_mut() {
         if !evdev::grab(device, take_over) {
             failed.push(device.name.clone());
         }
@@ -336,6 +336,7 @@ fn take_over_pointers(inner: &Arc<Inner>, take_over: bool) {
         take_over,
         devices = devices.len(),
         names = ?devices.iter().map(|device| device.name.clone()).collect::<Vec<_>>(),
+        held = devices.iter().filter(|device| device.grabbed).count(),
         failed = ?failed,
         "手柄指针节点的独占"
     );
