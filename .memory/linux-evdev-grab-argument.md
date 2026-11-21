@@ -46,10 +46,21 @@ Facts about `EVIOCGRAB` in `crates/oink-input/src/linux/evdev.rs` (2026-11-22):
   `手柄指针节点的独占` log line names the nodes that failed for exactly that reason.
   A grab that succeeded once is silent to the desktop until it is released, which is what
   takes the right stick away from the injected pointer.
+- **The failure has to carry its errno** (2026-11-22): `evdev::grab` returns
+  `Result<(), i32>` and the log line has an `errors=[("name", errno)]` field next to
+  `failed=[names]`. `EBUSY` (16) means another client holds the node, `EINVAL` (22) means
+  the request/argument was wrong, `EACCES` (13) means the node may not be grabbed. The
+  names alone cannot tell these apart, and the whole pointer diagnosis depends on which
+  one it is.
+- **A name is not a grab.** The log line also has `held=<count>`: the number of nodes
+  Oink really holds. `names` lists the candidates, `held` counts the successful grabs.
+  `tools/linux/verify-device.sh` asserts `held > 0` for the take-over and `held == 0`
+  after the release, because a failed take-over looks exactly like a successful one in
+  the names.
 
 **Why:** every mistake returns the same `EINVAL`/`EBUSY`, so the symptom was "the stick
 still drags the cursor" with nothing in the log that named the cause.
 **How to apply:** keep `the_grab_argument_is_the_value_and_not_a_pointer`,
-`a_device_is_not_grabbed_twice` and `a_failed_grab_is_not_remembered_as_held` in
-`evdev.rs`; verify with `OINK_LINUX_ARCH=arm64 tools/linux/check.sh test -p oink-input`.
+`a_device_is_not_grabbed_twice` and `a_failed_grab_reports_why` in `evdev.rs`; verify
+with `OINK_LINUX_ARCH=arm64 tools/linux/check.sh test -p oink-input`.
 See also [[linux-gamepad-pointer-conflict]] and [[linux-uinput-ioctl-numbers]].
