@@ -70,7 +70,24 @@ published RPM, copies it over, runs `sudo rpm-ostree install`, reboots into
 the new deployment, refreshes the udev rules
 (`udevadm control --reload` + `udevadm trigger --subsystem-match=input
 --action=change`), drops the hand-made rule copies in `/etc/udev/rules.d` and
-registers the login item through the installed agent. `rpm-ostree` moves the
-package's `/opt/oink` to `/usr/lib/opt/oink`, so the installed binaries are
-there, not in `/opt/oink`.
-See also [[linux-platform-identity]].
+writes the login item. `rpm-ostree` moves the package's `/opt/oink` to
+`/usr/lib/opt/oink`, so the installed binaries are there, not in `/opt/oink`.
+
+- **A newer version of the layered package has to uninstall the old one in the
+  same transaction.** `rpm-ostree install --allow-inactive <new>.rpm` answers
+  "cannot install both oink-0.3.6-3 and oink-0.3.6-1 — conflicting requests",
+  because the installed package is a layer of the current deployment. The
+  working form is `rpm-ostree install --allow-inactive --uninstall=oink
+  <new>.rpm` (dry-run it first to see the transaction).
+- **The device's sudo asks for a password**, and sudo does **not** run the
+  command through a shell: `sudo -S -p '' 'a && b'` tries to execute the whole
+  string as one program ("找不到命令"), and `sudo -S -p '' a && b` leaves the
+  second command unprivileged. The working form is
+  `sudo -S -p '' sh -c 'a && b'`, with the password on stdin.
+- **The login item is written by the deployment, not by the product's API.**
+  The product writes the entry itself, but only from the backend that runs in
+  the desktop session; over SSH there is no session, and the backend that does
+  answer may be a development copy whose entry points at the wrong program.
+  The product reads the entry from the file, so the file is what matters.
+
+See also [[linux-platform-identity]] and [[linux-handheld-build-fragility]].
