@@ -40,6 +40,15 @@ full sweep of that LAN finds no SSH host at all, so the handheld is not on it.
 Reaching the device therefore means re-authenticating the VPN, not waiting for
 the device.
 
+**The workstation's own network decides whether the device is reachable**
+(2026-11-21, afternoon). The handheld was healthy: after the 12:33 reboot it
+answered SSH and the deployment checks passed. It became unreachable when the
+workstation moved to another site (`192.168.187.110`): from there the whole
+`192.168.22.0/24` subnet does not answer ICMP either (a ping sweep finds
+nothing at all), and the route to `10.204.96.0/24` was gone with the expired
+aTrust session. So an unreachable handheld means "check the workstation's
+addresses and routes first", not "the device is off".
+
 **The peer machine can tell whether the device is alive.** `oink-agent call
 device_cards` (on macOS: `/Applications/Oink.app/Contents/MacOS/oink-agent`) lists every
 paired device with `connection.kind` and `lastSeenMs`. The handheld shows up under the
