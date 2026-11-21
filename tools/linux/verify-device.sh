@@ -101,9 +101,11 @@ login_item_points_at_the_installed_ui() {
         grep -Eq 'Exec="(/usr/lib)?/opt/oink/oink" --autostart'
 }
 
-# The backend has to run for the capture to work at all.
+# The backend has to run for the capture to work at all, and it has to be the
+# installed one. The process name has to match exactly: a pattern over the
+# command line also matches the shell that runs this very check.
 backend_is_running() {
-    ssh_to 'pgrep -af "opt/oink/oink-backend" || pgrep -a oink-backend'
+    ssh_to 'pid=$(pgrep -x oink-backend | head -1); [ -n "$pid" ] && readlink /proc/$pid/exe | grep -q "/opt/oink/oink-backend"'
 }
 
 check "the installed package" package_version
