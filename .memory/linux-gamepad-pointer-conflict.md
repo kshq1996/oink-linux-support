@@ -43,11 +43,15 @@ failed), so a failed grab is visible in the agent's log instead of being a
 silent symptom.
 
 **The InputPlumber mouse is a uinput device** (2026-11-21): its sysfs path is
-`/sys/devices/virtual/input/inputN`, so the capture now skips every device under
-`/sys/devices/virtual/input/` (`evdev.rs::is_virtual_device`). The name filter
-(`is_gamepad`) only caught the xpad node; the SteamOS virtual mouse was captured as a real
-mouse, so the right stick moved the *local* pointer and the shared pointer fought it (the mode
-decisions flapped between remote and local every few hundred milliseconds).
+`/sys/devices/virtual/input/inputN`, so it is a *virtual* device (`evdev.rs::is_virtual_device`).
+Virtual devices take no role in the capture (they are not human input: the
+SteamOS mouse is the right stick, and Oink's own pointer is virtual too), but
+they stay in the device list: the desktop still reads the SteamOS mouse as a
+mouse, so it has to be in the take-over list (`EVIOCGRAB`) while a peer holds
+the pointer. Dropping virtual devices from the list outright was a regression
+— the stick dragged the pointer back again. The role is `take_over`
+("a node that moves the desktop cursor"), and the log line
+`手柄指针节点的独占` now names the nodes it took over.
 
 **The systemd user unit must escape the shell's dollar signs** (2026-11-21):
 `tools/linux/deploy-device.sh` writes `ExecStart=/bin/sh -c '... ${socket##*/} ...'`, and
