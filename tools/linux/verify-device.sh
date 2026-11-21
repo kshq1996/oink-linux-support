@@ -153,8 +153,8 @@ session_service_keeps_the_display_name() {
         echo "the unit keeps the display name"'
 }
 
-# The gamepad's pointer nodes have to be taken away from the desktop while a
-# peer holds the pointer; the log says how many nodes were grabbed.
+# The nodes that move the desktop cursor have to be taken away while a peer
+# holds the pointer; the log says which ones were grabbed.
 gamepad_pointer_nodes_are_taken_away() {
     ssh_to '
         log=$(ls -t "$HOME"/.local/state/oink/Logs/oink-2*.log 2>/dev/null | head -n 1)
@@ -169,8 +169,13 @@ gamepad_pointer_nodes_are_taken_away() {
         fi
         echo "$line"
         case "$line" in
-        *"take_over=true"*) exit 0 ;;
+        *"take_over=true"*) ;;
         *) echo "the last grab did not take the nodes over"; exit 1 ;;
+        esac
+        # The nodes that are taken over have to be named: the stick drags the
+        # pointer back through every node the desktop reads as a mouse.
+        case "$line" in
+        *"names=[]"*) echo "no node was taken over"; exit 1 ;;
         esac'
 }
 

@@ -77,9 +77,10 @@ pub(crate) struct Device {
     pub(crate) buttons: bool,
     /// 这台设备会报键盘按键。
     pub(crate) keyboard: bool,
-    /// 这是手柄的指针节点：桌面（libinput）可能把它当鼠标用，
-    /// 摇杆一动光标就跟着动。截获不用它，但远端接管指针时要独占它。
-    pub(crate) gamepad_pointer: bool,
+    /// 这台设备是桌面上会动光标的指针节点：手柄的摇杆节点、SteamOS 的
+    /// 虚拟鼠标。截获不用它，但远端接管指针时要把它从桌面手里独占掉，
+    /// 否则摇杆一动就把注入的指针拖回去。
+    pub(crate) take_over: bool,
     /// 每逻辑像素对应多少设备计数。
     pub(crate) counts_per_pixel: f64,
 }
@@ -138,12 +139,10 @@ pub(crate) fn open_devices() -> Vec<Device> {
         if !file_name.starts_with("event") {
             continue;
         }
-        // 虚拟设备不是人手在动：SteamOS 的 InputPlumber 把右摇杆做成一个
-        // 虚拟鼠标（`ID_INPUT_MOUSE=1`），自己注入的指针设备也是虚拟的。
-        // 截获它们只会让共享指针跟自己较劲。
-        if is_virtual_device(file_name) {
-            continue;
-        }
+        // 虚拟设备（`uinput` 造出来的）不参与截获，但要在列表里：
+        // SteamOS 的 InputPlumber 把右摇杆做成一个虚拟鼠标，桌面照样
+        // 把它当鼠标用，远端接管指针时得能把它独占掉。
+        let virtual_device = is_virtual_device(file_name);
         let Ok(file) = File::open(&path) else {
             continue;
         };
@@ -156,16 +155,22 @@ pub(crate) fn open_devices() -> Vec<Device> {
         let rel = capability_bits(fd, EV_REL as u8, 8);
         let reports_motion = bit_set(&types, EV_REL) && bit_set(&rel, REL_X) && bit_set(&rel, REL_Y);
         let keys = capability_bits(fd, EV_KEY as u8, 128);
-        let roles = classify(&name, reports_motion, bit_set(&keys, BTN_LEFT), bit_set(&keys, KEY_A));
+        let roles = classify(
+            &name,
+            reports_motion,
+            bit_set(&keys, BTN_LEFT),
+            bit_set(&keys, KEY_A),
+            virtual_device,
+        );
         devices.push(Device {
             file,
             name,
             pointer: roles.pointer,
             buttons: roles.buttons,
             keyboard: roles.keyboard,
-            // 手柄的指针节点：截获不碰它，但要留着它的文件描述符，
-            // 远端接管指针时用它独占设备（见 [`grab`]）。
-            gamepad_pointer: roles.gamepad_pointer,
+            // 桌面上会动光标的指针节点：截获不碰它，但要留着它的文件
+            // 描述符，远端接管指针时用它独占设备（见 [`grab`]）。
+            take_over: roles.take_over,
             // 设备计数换算成逻辑像素的系数（鼠标的 DPI 决定）。
             counts_per_pixel: scale::counts_per_pixel(&path),
         });
@@ -222,8 +227,8 @@ struct Roles {
     buttons: bool,
     /// 键盘按键。
     keyboard: bool,
-    /// 手柄的指针节点：桌面可能把它当鼠标用，截获不用它，但要能独占它。
-    gamepad_pointer: bool,
+    /// 桌面上会动光标的指针节点：远端接管指针时要独占它。
+    take_over: bool,
 }
 
 /// 一台设备在截获里扮演什么角色。
@@ -231,13 +236,17 @@ struct Roles {
 /// 手柄的节点不参与截获：内核把摇杆开成鼠标节点（`REL_X`/`REL_Y`），
 /// 把按键开成键盘节点（`KEY_A`）。不排除的话，摇杆一动共享指针就跳，
 /// 手柄的按键还会变成发给对端的按键。
-fn classify(name: &str, reports_motion: bool, left_button: bool, key_a: bool) -> Roles {
+///
+/// 虚拟设备（`uinput` 造出来的）同样不参与截获：SteamOS 的 InputPlumber
+/// 把右摇杆做成一个虚拟鼠标，截获它只会让共享指针跟自己较劲。但它还是
+/// 桌面上的一只鼠标，远端接管指针时必须把它独占掉。
+fn classify(name: &str, reports_motion: bool, left_button: bool, key_a: bool, virtual_device: bool) -> Roles {
     let gamepad = is_gamepad(name);
     Roles {
-        pointer: !gamepad && reports_motion,
-        buttons: !gamepad && left_button,
-        keyboard: !gamepad && key_a,
-        gamepad_pointer: gamepad && reports_motion,
+        pointer: !gamepad && !virtual_device && reports_motion,
+        buttons: !gamepad && !virtual_device && left_button,
+        keyboard: !gamepad && !virtual_device && key_a,
+        take_over: reports_motion && (gamepad || virtual_device),
     }
 }
 
@@ -368,36 +377,53 @@ mod tests {
     #[test]
     fn a_gamepad_node_takes_no_role_in_the_capture() {
         // 手柄的鼠标节点：相对位移 + 鼠标左键，都不参与截获，
-        // 但要标成手柄指针，桌面才拿不到它。
-        let roles = classify("Xbox360 Controller for Windows Mouse", true, true, false);
+        // 但要标成桌面上会动光标的指针节点，桌面才拿不到它。
+        let roles = classify("Xbox360 Controller for Windows Mouse", true, true, false, false);
         assert!(!roles.pointer);
         assert!(!roles.buttons);
         assert!(!roles.keyboard);
-        assert!(roles.gamepad_pointer);
+        assert!(roles.take_over);
 
         // 手柄的键盘节点：内核给它开 `KEY_A`（手柄按键），
         // 那不能变成发给对端的键盘按键。
-        let roles = classify("Xbox360 Controller for Windows Keyboard", false, false, true);
+        let roles = classify("Xbox360 Controller for Windows Keyboard", false, false, true, false);
         assert!(!roles.pointer);
         assert!(!roles.buttons);
         assert!(!roles.keyboard);
-        assert!(!roles.gamepad_pointer);
+        assert!(!roles.take_over);
 
-        // SteamOS 的虚拟鼠标（摇杆）。
-        let roles = classify("InputPlumber Mouse", true, true, false);
+        // SteamOS 的虚拟鼠标（摇杆）：名字像手柄，也确实是虚拟设备。
+        let roles = classify("InputPlumber Mouse", true, true, false, true);
         assert!(!roles.pointer);
-        assert!(roles.gamepad_pointer);
+        assert!(!roles.buttons);
+        assert!(roles.take_over);
+    }
+
+    #[test]
+    fn a_virtual_pointer_is_neither_captured_nor_left_to_the_desktop() {
+        // 虚拟设备不是人手在动，不参与截获；但它还是桌面上的一只鼠标，
+        // 远端接管指针时必须能把它独占掉。
+        let roles = classify("Some Virtual Pointer", true, true, false, true);
+        assert!(!roles.pointer);
+        assert!(!roles.buttons);
+        assert!(!roles.keyboard);
+        assert!(roles.take_over);
+
+        // 不报位移的虚拟设备（虚拟键盘之类）不用独占。
+        let roles = classify("Some Virtual Keyboard", false, false, true, true);
+        assert!(!roles.keyboard);
+        assert!(!roles.take_over);
     }
 
     #[test]
     fn a_real_mouse_and_keyboard_keep_their_roles() {
-        let roles = classify("Logitech USB Mouse", true, true, false);
+        let roles = classify("Logitech USB Mouse", true, true, false, false);
         assert!(roles.pointer);
         assert!(roles.buttons);
         assert!(!roles.keyboard);
-        assert!(!roles.gamepad_pointer);
+        assert!(!roles.take_over);
 
-        let roles = classify("AT Translated Set 2 keyboard", false, false, true);
+        let roles = classify("AT Translated Set 2 keyboard", false, false, true, false);
         assert!(roles.keyboard);
         assert!(!roles.pointer);
     }

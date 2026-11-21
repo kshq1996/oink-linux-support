@@ -315,10 +315,10 @@ fn move_relative(inner: &Arc<Inner>, dx: f64, dy: f64) -> Result<(), InputError>
     let target = Point::new(cursor.x + dx, cursor.y + dy);
     move_to(inner, target, desktop_size(inner))
 }
-/// 独占（或放开）手柄的指针节点。
+/// 独占（或放开）桌面上会动光标的指针节点。
 ///
-/// 桌面（libinput）把手柄的指针节点当成鼠标：摇杆一动，光标就跟着动，
-/// 和注入的指针互相拉扯，光标像是被摇杆拖回原处。
+/// 桌面（libinput）把手柄的指针节点、SteamOS 的虚拟摇杆鼠标当成鼠标：
+/// 摇杆一动，光标就跟着动，和注入的指针互相拉扯，光标像是被摇杆拖回原处。
 /// 远端接管指针期间独占这些节点，桌面就收不到它们的事件；
 /// 本地拿回指针时再放开。
 fn take_over_gamepad_pointers(inner: &Arc<Inner>, take_over: bool) {
@@ -330,9 +330,12 @@ fn take_over_gamepad_pointers(inner: &Arc<Inner>, take_over: bool) {
         }
     }
     // 独占失败不留痕迹就看不出摇杆为什么还在拖光标，所以写下来。
+    // 节点的名字也写下来：手柄的鼠标节点和 SteamOS 的虚拟摇杆鼠标
+    // 都要在列表里，少一个摇杆就能拖光标。
     tracing::info!(
         take_over,
         devices = devices.len(),
+        names = ?devices.iter().map(|device| device.name.clone()).collect::<Vec<_>>(),
         failed = ?failed,
         "手柄指针节点的独占"
     );
