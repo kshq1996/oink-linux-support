@@ -22,9 +22,6 @@ const LOGICAL_DPI: f64 = 96.0;
 /// 鼠标的默认 DPI：驱动基本不报 DPI，1000 是最常见的档位。
 const DEFAULT_MOUSE_DPI: f64 = 1000.0;
 
-/// 滚轮一格的设备计数（传统滚轮一格 120）。
-pub(crate) const WHEEL_DETENT: i32 = 120;
-
 /// 环境变量：手动指定系数（每个逻辑像素多少设备计数）。
 const ENV_COUNTS_PER_PIXEL: &str = "OINK_LINUX_POINTER_COUNTS_PER_PIXEL";
 
@@ -34,11 +31,6 @@ pub(crate) fn counts_per_pixel(device: &Path) -> f64 {
         return value;
     }
     mouse_dpi(device).unwrap_or(DEFAULT_MOUSE_DPI) / LOGICAL_DPI
-}
-
-/// 滚轮计数换算成行数：一格滚轮是 120 个计数。
-pub(crate) fn wheel_lines(counts: f64) -> f64 {
-    counts / f64::from(WHEEL_DETENT)
 }
 
 /// 环境变量里手动指定的系数。
@@ -79,13 +71,6 @@ fn mouse_dpi(device: &Path) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn one_wheel_detent_is_one_line() {
-        assert_eq!(wheel_lines(120.0), 1.0);
-        assert_eq!(wheel_lines(-120.0), -1.0);
-        assert_eq!(wheel_lines(360.0), 3.0);
-    }
 
     #[test]
     fn a_device_without_a_known_dpi_uses_the_default() {

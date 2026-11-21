@@ -104,8 +104,8 @@ fn scroll(inner: &Inner, dx: f64, dy: f64, unit: ScrollUnit) -> Result<(), Input
     let (vertical, horizontal) = {
         let mut state = lock(&inner.state);
         (
-            keymap::take_whole(&mut state.scroll_remainder.0, dy),
-            keymap::take_whole(&mut state.scroll_remainder.1, dx),
+            keymap::take_notches(&mut state.scroll_remainder.0, dy),
+            keymap::take_notches(&mut state.scroll_remainder.1, dx),
         )
     };
     for number in keymap::notch_buttons(horizontal as f64, vertical as f64) {

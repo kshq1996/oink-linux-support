@@ -26,7 +26,6 @@ use oink_foundation::input::{
 use crate::capture_loop::{CaptureLoop, Wake};
 use crate::linux::evdev::{self, Device};
 use crate::linux::keycodes;
-use crate::linux::scale;
 use crate::linux::uinput::Injector;
 use crate::{EventHandler, InputBackend, InputError};
 use x11rb::connection::Connection;
@@ -554,8 +553,11 @@ fn read_devices(inner: Arc<Inner>, mut devices: Vec<Device>, tx: Sender<Message>
                         match event.code {
                             evdev::REL_X => motion.0 += counts / device.counts_per_pixel,
                             evdev::REL_Y => motion.1 += counts / device.counts_per_pixel,
-                            evdev::REL_WHEEL => wheel.1 += scale::wheel_lines(counts),
-                            evdev::REL_HWHEEL => wheel.0 += scale::wheel_lines(counts),
+                            // `REL_WHEEL` 是旧式滚轮：一个单位就是一格。
+                            // 高分辨率滚轮（1/120 格）另发 `REL_WHEEL_HI_RES`，
+                            // 这里不读它，读旧式的那个就够了。
+                            evdev::REL_WHEEL => wheel.1 += counts,
+                            evdev::REL_HWHEEL => wheel.0 += counts,
                             _ => {}
                         }
                     }

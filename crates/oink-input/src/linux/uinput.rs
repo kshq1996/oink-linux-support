@@ -21,7 +21,6 @@ use crate::InputError;
 use crate::linux::keycodes;
 use crate::linux::keymap;
 use crate::linux::lock;
-use crate::linux::scale::WHEEL_DETENT;
 
 // 内核的事件类型与代码（`include/uapi/linux/input-event-codes.h`）。
 const EV_SYN: u16 = 0x00;
@@ -54,8 +53,8 @@ enum ScrollAxis {
     Horizontal,
 }
 
-/// 单次注入的滚轮上限：64 格（内核单位是 1/120 格）。
-const MAX_WHEEL_UNITS: i64 = 64 * 120;
+/// 单次注入最多发出的滚轮格数，避免异常大的滚动量刷爆事件队列。
+const MAX_WHEEL_NOTCHES: i64 = 64;
 
 const IOC_NONE: u32 = 0;
 const IOC_WRITE: u32 = 1;
@@ -247,11 +246,16 @@ impl Injector {
     /// 符号约定与 X11 那边一致：`dy > 0` 是视图向文档顶部移动（传统滚轮向上滚），
     /// `dx > 0` 是视图向文档左侧移动。内核的 `REL_WHEEL` 正值就是「滚轮向上」，
     /// `REL_HWHEEL` 正值就是「滚轮向右」，与 X11 的按钮 4 / 按钮 6 同义。
+    ///
+    /// `REL_WHEEL` 是旧式滚轮：一个单位就是一格。高分辨率滚轮（1/120 格）
+    /// 只有真实设备才有——内核靠滚轮轴的分辨率（120）额外发一份
+    /// `REL_WHEEL_HI_RES`，而 uinput 设不了那个分辨率（`UI_DEV_SETUP` 只管
+    /// 绝对轴），所以 uinput 设备在 libinput 那里永远是旧式滚轮：
+    /// 按 1/120 格发会被当成 120 格，滚动快一百多倍。
     pub(crate) fn scroll(&self, dx: f64, dy: f64, unit: ScrollUnit) -> Result<(), InputError> {
         let (horizontal, vertical) = keymap::scroll_notches(dx, dy, unit);
         let mut events = Vec::new();
-        // 内核的滚轮单位是 1/120 格：120 才是完整的一格。小数滚轮按 1/120 保留，
-        // 不足 1/120 的零头留到下次：四舍五入成整格会把触摸板的一小段滑动放大成
+        // 不足一格的零头留到下次：四舍五入成整格会把触摸板的一小段滑动放大成
         // 一整格，滚动因此快好几倍（Windows 端就是按小数注入的）。
         let vertical_steps = self.scroll_units(ScrollAxis::Vertical, vertical);
         let horizontal_steps = self.scroll_units(ScrollAxis::Horizontal, horizontal);
@@ -268,14 +272,14 @@ impl Injector {
         self.write_events(&events)
     }
 
-    /// 滚轮量 → 内核的 1/120 格单位；不足 1/120 的零头留到下次。
+    /// 滚轮量 → 内核的整格单位；不足一格的零头留到下次。
     fn scroll_units(&self, axis: ScrollAxis, notches: f64) -> i32 {
         let mut remainder = lock(&self.scroll_remainder);
         let slot = match axis {
             ScrollAxis::Vertical => &mut remainder.0,
             ScrollAxis::Horizontal => &mut remainder.1,
         };
-        wheel_units(slot, notches) as i32
+        wheel_notches(slot, notches) as i32
     }
 
     /// 写一批事件。
@@ -356,10 +360,9 @@ impl Injector {
     }
 }
 
-/// 滚轮量 → 内核的 1/120 格单位；不足 1/120 的零头留在 `remainder` 里。
-fn wheel_units(remainder: &mut f64, notches: f64) -> i64 {
-    let units = keymap::take_whole(remainder, notches * f64::from(WHEEL_DETENT));
-    units.clamp(-MAX_WHEEL_UNITS, MAX_WHEEL_UNITS)
+/// 滚轮量 → 内核的整格单位（`REL_WHEEL` 一个单位就是一格）。
+fn wheel_notches(remainder: &mut f64, notches: f64) -> i64 {
+    keymap::take_notches(remainder, notches).clamp(-MAX_WHEEL_NOTCHES, MAX_WHEEL_NOTCHES)
 }
 
 impl AsRawFd for Injector {
@@ -435,21 +438,15 @@ mod tests {
     }
 
     #[test]
-    fn fractional_scroll_keeps_the_kernel_precision() {
-        // 触摸板的一小段滑动不到一格：按 1/120 保留，不能放大成整格。
+    fn fractional_scroll_keeps_the_notch_count() {
+        // uinput 的 `REL_WHEEL` 是旧式滚轮：一个单位就是一格。
         let mut remainder = 0.0;
-        assert_eq!(wheel_units(&mut remainder, 0.4), 48);
-        assert_eq!(wheel_units(&mut remainder, 0.4), 48);
-        // 0.41 格 = 49.2 个计数：不足一个计数的零头留到下次。
+        assert_eq!(wheel_notches(&mut remainder, 0.4), 0);
+        assert_eq!(wheel_notches(&mut remainder, 0.4), 1);
+        // 整格滚轮不多不少。
         let mut remainder = 0.0;
-        assert_eq!(wheel_units(&mut remainder, 0.41), 49);
-        assert!((remainder - 0.2).abs() < 1e-5, "remainder = {remainder}");
-        assert_eq!(wheel_units(&mut remainder, 0.41), 49);
-        assert!((remainder - 0.4).abs() < 1e-5, "remainder = {remainder}");
-        // 整格滚轮仍然是 120 个计数。
-        let mut remainder = 0.0;
-        assert_eq!(wheel_units(&mut remainder, 1.0), 120);
-        assert_eq!(wheel_units(&mut remainder, -1.0), -120);
+        assert_eq!(wheel_notches(&mut remainder, 1.0), 1);
+        assert_eq!(wheel_notches(&mut remainder, -1.0), -1);
     }
 
     #[test]

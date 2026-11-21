@@ -172,7 +172,7 @@ Description=Oink
 
 [Service]
 Type=simple
-ExecStart=/bin/sh -c 'socket=\$(ls /run/user/\$(id -u)/wayland-* /run/user/\$(id -u)/gamescope-[0-9] 2>/dev/null | head -n 1); export WAYLAND_DISPLAY=\${socket##*/}; export DISPLAY=:0; exec $ui'
+ExecStart=/bin/sh -c 'socket=\$\$(ls /run/user/\$\$(id -u)/wayland-* /run/user/\$\$(id -u)/gamescope-[0-9] 2>/dev/null | head -n 1); export WAYLAND_DISPLAY=\$\${socket##*/}; export DISPLAY=:0; exec $ui'
 Restart=on-failure
 RestartSec=5
 

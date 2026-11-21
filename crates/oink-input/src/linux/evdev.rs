@@ -14,6 +14,7 @@
 use std::fs::File;
 use std::io::Read;
 use std::os::fd::{AsRawFd, RawFd};
+use std::path::Path;
 
 use super::scale;
 
@@ -137,6 +138,12 @@ pub(crate) fn open_devices() -> Vec<Device> {
         if !file_name.starts_with("event") {
             continue;
         }
+        // 虚拟设备不是人手在动：SteamOS 的 InputPlumber 把右摇杆做成一个
+        // 虚拟鼠标（`ID_INPUT_MOUSE=1`），自己注入的指针设备也是虚拟的。
+        // 截获它们只会让共享指针跟自己较劲。
+        if is_virtual_device(file_name) {
+            continue;
+        }
         let Ok(file) = File::open(&path) else {
             continue;
         };
@@ -164,6 +171,23 @@ pub(crate) fn open_devices() -> Vec<Device> {
         });
     }
     devices
+}
+
+/// 设备节点是不是内核里的虚拟设备（`uinput` 造出来的）。
+///
+/// `/sys/class/input/eventN/device` 指向设备的 sysfs 目录：真实设备在
+/// `/sys/devices/...` 下面，虚拟设备在 `/sys/devices/virtual/input/` 下面。
+fn is_virtual_device(file_name: &str) -> bool {
+    let link = Path::new("/sys/class/input").join(file_name).join("device");
+    let Ok(target) = std::fs::read_link(link) else {
+        return false;
+    };
+    is_virtual_path(&target.to_string_lossy())
+}
+
+/// sysfs 的链接目标是不是虚拟设备。
+fn is_virtual_path(target: &str) -> bool {
+    target.contains("/virtual/input/")
 }
 
 /// 设备名看起来像手柄吗？
@@ -298,6 +322,17 @@ mod tests {
         assert!(!bit_set(&bits, 8));
         assert!(!bit_set(&bits, 64));
         assert!(!bit_set(&bits, 200));
+    }
+
+    #[test]
+    fn a_virtual_device_is_recognized_by_its_sysfs_path() {
+        // uinput 造出来的设备在 `/sys/devices/virtual/input/` 下面。
+        assert!(is_virtual_path("../../../devices/virtual/input/input20"));
+        // 真实设备（手柄、鼠标、触摸板）不在。
+        assert!(!is_virtual_path(
+            "../../../devices/pci0000:00/0000:00:14.3/usb3/3-3/input/input10"
+        ));
+        assert!(!is_virtual_path("../../../devices/virtual/misc/input0"));
     }
 
     #[test]

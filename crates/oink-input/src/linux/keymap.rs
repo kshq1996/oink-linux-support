@@ -467,18 +467,20 @@ fn push_notches(buttons: &mut Vec<u8>, value: f64, positive: u8, negative: u8) {
     buttons.extend(std::iter::repeat_n(button, steps as usize));
 }
 
-/// 累积小数部分，返回本次应发出的整数单位；零头留到下次。
+/// 累积小数格数，返回本次应发出的整格；零头留到下次。
 ///
+/// 用四舍五入而不是截断：触摸板的一小段滑动立刻就有一格的反应，
+/// 累积的误差也不会越滚越大（误差扩散）。
 /// 正负方向各自累积：方向反转时零头不互相抵消。
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub(crate) fn take_whole(remainder: &mut f64, add: f64) -> i64 {
-    // 容差：0.3 / 3 * 120 = 11.999999999999998 这类浮点误差不能让一个单位永远留在余数里
+pub(crate) fn take_notches(remainder: &mut f64, add: f64) -> i64 {
+    // 容差：浮点误差不能让一格永远留在余数里。
     const EPS: f64 = 1e-6;
     *remainder += add;
     let whole = if *remainder >= 0.0 {
-        (*remainder + EPS).floor()
+        (*remainder + EPS).round()
     } else {
-        (*remainder - EPS).ceil()
+        (*remainder - EPS).round()
     };
     *remainder -= whole;
     whole as i64
@@ -640,17 +642,20 @@ mod tests {
 
     #[test]
     fn fractional_scroll_accumulates_into_whole_notches() {
-        // 零头留到下次：三次 0.4 格凑成一格，滚动量与来源一致。
+        // 零头用误差扩散保留：0.4 格这一次不发，欠着的 0.8 格下一次补上一格。
         let mut remainder = 0.0;
-        assert_eq!(take_whole(&mut remainder, 0.4), 0);
-        assert_eq!(take_whole(&mut remainder, 0.4), 0);
-        assert_eq!(take_whole(&mut remainder, 0.4), 1);
-        assert!((remainder - 0.2).abs() < 1e-9, "remainder = {remainder}");
+        assert_eq!(take_notches(&mut remainder, 0.4), 0);
+        assert_eq!(take_notches(&mut remainder, 0.4), 1);
+        assert!((remainder + 0.2).abs() < 1e-9, "remainder = {remainder}");
         // 负方向同样累积，零头不与正方向抵消。
         let mut remainder = 0.0;
-        assert_eq!(take_whole(&mut remainder, -0.6), 0);
-        assert_eq!(take_whole(&mut remainder, -0.6), -1);
-        assert!((remainder + 0.2).abs() < 1e-9, "remainder = {remainder}");
+        assert_eq!(take_notches(&mut remainder, -0.6), -1);
+        assert!((remainder - 0.4).abs() < 1e-9, "remainder = {remainder}");
+        // 整格滚轮不多不少。
+        let mut remainder = 0.0;
+        assert_eq!(take_notches(&mut remainder, 1.0), 1);
+        assert_eq!(take_notches(&mut remainder, -1.0), -1);
+        assert!(remainder.abs() < 1e-9, "remainder = {remainder}");
     }
 
     #[test]
