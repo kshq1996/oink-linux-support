@@ -42,6 +42,21 @@ logged now (`手柄指针节点的独占` with the node count and the names that
 failed), so a failed grab is visible in the agent's log instead of being a
 silent symptom.
 
+**The InputPlumber mouse is a uinput device** (2026-11-21): its sysfs path is
+`/sys/devices/virtual/input/inputN`, so the capture now skips every device under
+`/sys/devices/virtual/input/` (`evdev.rs::is_virtual_device`). The name filter
+(`is_gamepad`) only caught the xpad node; the SteamOS virtual mouse was captured as a real
+mouse, so the right stick moved the *local* pointer and the shared pointer fought it (the mode
+decisions flapped between remote and local every few hundred milliseconds).
+
+**The systemd user unit must escape the shell's dollar signs** (2026-11-21):
+`tools/linux/deploy-device.sh` writes `ExecStart=/bin/sh -c '... ${socket##*/} ...'`, and
+systemd expands `${socket##*/}` as its *own* variable (`Invalid environment variable name
+evaluates to an empty string: socket##*/`). The unit therefore has to carry `$${socket##*/}`
+(and `$$(...)`), and the heredoc that writes it has to escape them again (`\$\${socket##*/}`).
+Without `WAYLAND_DISPLAY` the backend takes the X11 path, and XTEST cannot move the
+compositor's cursor — the visible pointer then only moves when the stick drags it.
+
 **Why:** the pointer looked stuck and was dragged back by the stick, which is two different
 faults: the deployed build injected through XTEST into XWayland (XWayland cannot move the
 compositor's cursor), and the stick's pointer nodes fight the injected pointer in the same
