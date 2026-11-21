@@ -310,8 +310,6 @@ fn grab_with(
     Ok(())
 }
 
-
-
 /// 读设备的能力位图。
 fn capability_bits(fd: RawFd, ev: u8, len: usize) -> Vec<u8> {
     let mut bits = vec![0u8; len];
@@ -548,5 +546,4 @@ mod tests {
         assert_eq!(grabbed, Err(libc::EBUSY));
         assert!(!device.grabbed);
     }
-
 }
