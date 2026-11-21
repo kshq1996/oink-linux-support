@@ -324,9 +324,19 @@ fn move_relative(inner: &Arc<Inner>, dx: f64, dy: f64) -> Result<(), InputError>
 /// 本地拿回指针时再放开。
 fn take_over_gamepad_pointers(inner: &Arc<Inner>, take_over: bool) {
     let devices = lock(&inner.gamepad_pointers);
+    let mut failed = Vec::new();
     for device in devices.iter() {
-        evdev::grab(device, take_over);
+        if !evdev::grab(device, take_over) {
+            failed.push(device.name.clone());
+        }
     }
+    // 独占失败不留痕迹就看不出摇杆为什么还在拖光标，所以写下来。
+    tracing::info!(
+        take_over,
+        devices = devices.len(),
+        failed = ?failed,
+        "手柄指针节点的独占"
+    );
 }
 
 /// 开始截获：打开输入设备、起读取线程与派发线程。
