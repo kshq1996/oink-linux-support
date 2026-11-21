@@ -53,6 +53,13 @@ the pointer. Dropping virtual devices from the list outright was a regression
 ("a node that moves the desktop cursor"), and the log line
 `手柄指针节点的独占` now names the nodes it took over.
 
+**The take-over never released the nodes (2026-11-22):** the published build passed a
+pointer to an `int` to `EVIOCGRAB`, and the kernel reads that argument as the decision
+(non-zero = grab, zero = release). The address is never NULL, so the "release" was a
+second grab and the kernel answered `EBUSY`; the nodes stayed with Oink and the desktop
+never got them back. The grab now passes the value (1 = grab, 0 = release) and tracks the
+state itself. See [[linux-evdev-grab-argument]].
+
 **The systemd user unit must escape the shell's dollar signs** (2026-11-21):
 `tools/linux/deploy-device.sh` writes `ExecStart=/bin/sh -c '... ${socket##*/} ...'`, and
 systemd expands `${socket##*/}` as its *own* variable (`Invalid environment variable name
