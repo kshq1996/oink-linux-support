@@ -31,6 +31,17 @@ Facts found while fixing the pointer on the Bazzite handheld (2026-11-18):
   GTK"); `systemd-run --user --unit=... <ui>` works, because the user manager carries the
   session variables.
 
+**What the deployed package does (measured on the device, 2026-11-21):** the
+published `0.3.6-3` (and `0.3.6-4`) carries the udev rule, and after the
+deployment `event5` has no `ID_INPUT_MOUSE` and `libinput list-devices` does
+not list the gamepad pointer any more. `event18` (the InputPlumber mouse)
+stays a mouse for the desktop on purpose — SteamOS wants the stick to work as
+a mouse for games — and Oink takes it away from the desktop with `EVIOCGRAB`
+only while the peer holds the pointer (`CaptureMode::Remote`). The grab is
+logged now (`手柄指针节点的独占` with the node count and the names that
+failed), so a failed grab is visible in the agent's log instead of being a
+silent symptom.
+
 **Why:** the pointer looked stuck and was dragged back by the stick, which is two different
 faults: the deployed build injected through XTEST into XWayland (XWayland cannot move the
 compositor's cursor), and the stick's pointer nodes fight the injected pointer in the same
