@@ -106,7 +106,7 @@ struct Inner {
     capture: Mutex<CaptureSlot>,
     /// 手柄的指针节点：远端接管指针时要独占它们，
     /// 否则摇杆会和注入的指针拉扯。
-    gamepad_pointers: Mutex<Vec<evdev::Device>>,
+    take_over_devices: Mutex<Vec<evdev::Device>>,
 }
 
 /// Wayland 输入后端。
@@ -129,7 +129,7 @@ pub(crate) fn backend() -> Result<Box<dyn InputBackend>, InputError> {
         size: Mutex::new(size),
         state: Mutex::new(State::new(size)),
         capture: Mutex::new(CaptureSlot::default()),
-        gamepad_pointers: Mutex::new(Vec::new()),
+        take_over_devices: Mutex::new(Vec::new()),
     });
     Ok(Box::new(Wayland { inner }))
 }
@@ -210,7 +210,7 @@ impl InputBackend for Wayland {
         }
         // 远端接管指针时，手柄的指针节点要从桌面手里拿走：
         // 桌面把摇杆当鼠标，摇杆一动就把注入的指针拖回去。
-        take_over_gamepad_pointers(&self.inner, park.is_some());
+        take_over_pointers(&self.inner, park.is_some());
         if let Some(park) = park {
             // Wayland 没有「隐藏光标」：把指针挪到停靠点，
             // 之后的本地移动由截获线程挪回来。
@@ -321,8 +321,8 @@ fn move_relative(inner: &Arc<Inner>, dx: f64, dy: f64) -> Result<(), InputError>
 /// 摇杆一动，光标就跟着动，和注入的指针互相拉扯，光标像是被摇杆拖回原处。
 /// 远端接管指针期间独占这些节点，桌面就收不到它们的事件；
 /// 本地拿回指针时再放开。
-fn take_over_gamepad_pointers(inner: &Arc<Inner>, take_over: bool) {
-    let devices = lock(&inner.gamepad_pointers);
+fn take_over_pointers(inner: &Arc<Inner>, take_over: bool) {
+    let devices = lock(&inner.take_over_devices);
     let mut failed = Vec::new();
     for device in devices.iter() {
         if !evdev::grab(device, take_over) {
@@ -354,14 +354,14 @@ fn start_inner(
         }
     }
     // 手柄的指针节点不参与截获，但要留着：远端接管指针时要独占它们。
-    let mut gamepad_pointers = Vec::new();
+    let mut take_over_devices = Vec::new();
     let mut devices = Vec::new();
     for device in evdev::open_devices() {
         if device.name == DEVICE_NAME {
             continue;
         }
-        if device.gamepad_pointer {
-            gamepad_pointers.push(device);
+        if device.take_over {
+            take_over_devices.push(device);
             continue;
         }
         if device.pointer || device.buttons || device.keyboard {
@@ -373,8 +373,8 @@ fn start_inner(
             "读不到任何输入设备（/dev/input）：截获不可用".into(),
         ));
     }
-    *lock(&inner.gamepad_pointers) = gamepad_pointers;
-    take_over_gamepad_pointers(inner, matches!(lock(&inner.state).mode, CaptureMode::Remote { .. }));
+    *lock(&inner.take_over_devices) = take_over_devices;
+    take_over_pointers(inner, matches!(lock(&inner.state).mode, CaptureMode::Remote { .. }));
     {
         let mut state = lock(&inner.state);
         state.running = true;
