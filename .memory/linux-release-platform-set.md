@@ -64,6 +64,14 @@ Debian revision `3` (build `306003`), and the tag points at the commit the
 assets were built from. A push after the release exists is harmless: the
 guard job sees the release and skips the run.
 
+**The second republish of v0.3.6 (2026-11-21, later the same day)**: the scroll and
+pointer fixes went in as `a71801a32b`, and the release was rebuilt with sequence `5`
+(build `306005`, RPM release `5`, Debian revision `5`) — the same dance: delete the
+release with its tag, push the commit, then `workflow_dispatch` with `sequence: 5`
+(the push trigger itself builds sequence 1 and is skipped by the guard job once the
+release exists). The published x64 RPM's sha256 is
+`a6e2a5f7360fdac27333c494ffb8bdfbf5310a5582d6e6e339dd5fce4f34145d`.
+
 **The device installs the package with `rpm-ostree`**, not by copying the
 binaries: `tools/linux/deploy-device.sh <arch> <host> [--reboot]` downloads the
 published RPM, copies it over, runs `sudo rpm-ostree install`, reboots into
