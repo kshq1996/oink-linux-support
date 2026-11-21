@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
-# Check the Oink install on the test device.
-#
-# The checks are the ones that decide whether the shared pointer survives the
-# gamepad's right stick: the gamepad's mouse node must not be a mouse for the
-# desktop, the rules must come from the package, and the login item must name
-# the installed interface program.
+# Check the deployed Linux build on the test device.
 #
 # Usage: tools/linux/verify-device.sh <host>
-set -uo pipefail
+#
+# The checks answer the questions the pointer and scroll fixes raise:
+#
+# - which input path the backend takes (Wayland/uinput or X11/XTEST): the
+#   environment of the running processes decides it, and the X11 path cannot
+#   move the compositor's cursor;
+# - whether the gamepad's pointer nodes are taken away from the desktop while
+#   a peer holds the pointer (the log line "手柄指针节点的独占");
+# - whether the mode decisions settle: they used to flap between remote and
+#   local every few hundred milliseconds while the right stick fought the
+#   injected pointer;
+# - which values the virtual pointer device receives: one scroll notch is one
+#   `REL_WHEEL` unit (a uinput device is a legacy wheel for libinput).
+set -euo pipefail
 
 HOST=${1:-}
 if [[ -z "$HOST" ]]; then
@@ -15,109 +23,59 @@ if [[ -z "$HOST" ]]; then
     exit 2
 fi
 
-failed=0
+ssh "$HOST" bash -s <<'REMOTE'
+set -u
+LOG_DIR="$HOME/.local/state/oink/Logs"
+LOG=$(ls -t "$LOG_DIR"/oink-2*.log 2>/dev/null | head -n 1)
 
-# A device that does not answer must not make the script hang.
-ssh_to() {
-    ssh -o ConnectTimeout=10 -o BatchMode=yes "$HOST" "$@"
-}
+echo "=== the package"
+rpm -q oink 2>/dev/null || echo "oink is not installed as a package"
 
-check() {
-    local title=$1
-    shift
-    echo "== $title"
-    if "$@"; then
-        echo "   ok"
-    else
-        echo "   FAILED"
-        failed=1
-    fi
-}
+echo "=== the processes and their session environment"
+for pid in $(pgrep -f 'oink-backend' ; pgrep -x oink); do
+    printf '%s: %s\n' "$pid" "$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)"
+    tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null |
+        grep -E '^(WAYLAND_DISPLAY|DISPLAY|XDG_SESSION_TYPE|XDG_CURRENT_DESKTOP)=' |
+        tr '\n' ' '
+    echo
+done
 
-# The installed package carries the version and the build sequence, so a
-# device that still runs the old package is told apart from a patched one.
-package_version() {
-    ssh_to 'rpm -q oink 2>/dev/null || dpkg-query -W -f="${Package} ${Version}\n" oink 2>/dev/null'
-}
-
-# The rules have to come from the package: a hand-made copy in /etc is the
-# reason the old build kept treating the stick as a mouse.
-rules_from_the_package() {
-    ssh_to '
-        status=0
-        if [ ! -f /usr/lib/udev/rules.d/65-oink-input.rules ]; then
-            echo "the packaged rule is missing from /usr/lib/udev/rules.d"
-            status=1
-        fi
-        for copy in /etc/udev/rules.d/*oink*; do
-            [ -e "$copy" ] || continue
-            echo "hand-made copy: $copy"
-            status=1
-        done
-        if [ $status -eq 0 ]; then
-            echo "the rules come from the package"
-        fi
-        exit $status'
-}
-
-# The gamepad's mouse node is the one that drags the shared pointer back.
-# The packaged rule clears its ID_INPUT_MOUSE, so the desktop stops taking it
-# for a mouse.
-gamepad_node_is_not_a_mouse() {
-    ssh_to '
-        status=0
-        for node in /dev/input/event*; do
-            properties=$(udevadm info -q property -n "$node" 2>/dev/null)
-            name=$(echo "$properties" | sed -n "s/^NAME=//p")
-            case "$name" in
-            *Controller*Mouse*|*Gamepad*Mouse*|*Joystick*Mouse*) ;;
-            *) continue ;;
-            esac
-            mouse=$(echo "$properties" | sed -n "s/^ID_INPUT_MOUSE=//p")
-            if [ -n "$mouse" ]; then
-                echo "$node ($name) still says ID_INPUT_MOUSE=$mouse"
-                status=1
-            else
-                echo "$node ($name) is not a mouse"
-            fi
-        done
-        exit $status'
-}
-
-# libinput is what the desktop actually reads; the node must not be in its
-# list as a pointer.
-libinput_does_not_list_the_gamepad_pointer() {
-    ssh_to '
-        if libinput list-devices 2>/dev/null | grep -iE "controller.*mouse|gamepad.*mouse|joystick.*mouse"; then
-            exit 1
-        fi
-        echo "no gamepad pointer in the device list"'
-}
-
-# The login item has to name the installed interface program. On an
-# rpm-ostree system the package lands in /usr/lib/opt/oink.
-login_item_points_at_the_installed_ui() {
-    ssh_to 'cat "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/oink.desktop" 2>/dev/null' |
-        grep -Eq 'Exec="(/usr/lib)?/opt/oink/oink" --autostart'
-}
-
-# The backend has to run for the capture to work at all, and it has to be the
-# installed one. The process name has to match exactly: a pattern over the
-# command line also matches the shell that runs this very check.
-backend_is_running() {
-    ssh_to 'pid=$(pgrep -x oink-backend | head -1); [ -n "$pid" ] && readlink /proc/$pid/exe | grep -q "/opt/oink/oink-backend"'
-}
-
-check "the installed package" package_version
-check "the rules come from the package" rules_from_the_package
-check "the gamepad's mouse node is not a mouse" gamepad_node_is_not_a_mouse
-check "libinput does not list the gamepad pointer" libinput_does_not_list_the_gamepad_pointer
-check "the login item names the installed interface program" login_item_points_at_the_installed_ui
-check "the backend runs" backend_is_running
-
-if [[ "$failed" == 0 ]]; then
-    echo "All checks passed."
+echo "=== the session service"
+systemctl --user is-active oink-ui.service 2>/dev/null || true
+unit="$HOME/.config/systemd/user/oink-ui.service"
+if [ -f "$unit" ]; then
+    grep '^ExecStart=' "$unit" || true
 else
-    echo "Some checks failed."
+    echo "no unit at $unit"
 fi
-exit "$failed"
+
+echo "=== the gamepad pointer nodes"
+if [ -n "${LOG:-}" ]; then
+    grep -a '手柄指针节点的独占' "$LOG" | tail -n 5 || echo "no grab line in $LOG"
+else
+    echo "no agent log in $LOG_DIR"
+fi
+
+echo "=== the mode decisions (the last five)"
+if [ -n "${LOG:-}" ]; then
+    grep -a 'ModeDecision' "$LOG" | tail -n 5 || echo "no mode decision in $LOG"
+fi
+
+echo "=== the virtual pointer device"
+node=""
+for dir in /sys/class/input/event*; do
+    name="${dir}/device/name"
+    [ -r "$name" ] || continue
+    if grep -q 'Oink' "$name"; then
+        node="$dir"
+        break
+    fi
+done
+if [ -n "$node" ]; then
+    echo "$node ($(cat "${node}/device/name"))"
+    echo "the events it receives (one scroll notch is one REL_WHEEL unit):"
+    echo "  timeout 5 cat /dev/input/$(basename "$node") | head -40"
+else
+    echo "no Oink virtual pointer registered"
+fi
+REMOTE

@@ -14,8 +14,15 @@ Facts about the Wayland input backend (`crates/oink-input/src/linux/`, 2026-11-1
 - **Injection** (`linux/uinput.rs`): a virtual pointer device in `/dev/uinput` whose absolute range
   (`ABS_X`/`ABS_Y`) is the **desktop size in logical pixels**, with `INPUT_PROP_DIRECT` set so the
   compositor maps it one-to-one instead of treating it as a touchscreen. The device is rebuilt when
-  the desktop size changes (the range is fixed when the device is created). The wheel unit is
-  1/120 of a detent: a full detent is `REL_WHEEL = 120`, not 1.
+  the desktop size changes (the range is fixed when the device is created).
+- **A uinput device is a legacy wheel** (2026-11-21): `REL_WHEEL` is the old wheel, and **one unit
+  is one detent**. The high-resolution wheel (1/120 of a detent) only exists on real HID devices:
+  the kernel's HID driver sends `REL_WHEEL` *and* `REL_WHEEL_HI_RES`, while `uinput` cannot declare
+  a wheel resolution at all (`UI_DEV_SETUP` covers the absolute axes only), so libinput reads the
+  `REL_WHEEL` value as detents. Injecting 1/120-detent units therefore scrolled **120 detents per
+  flick** ("滚一下就到底"). The injector now sends whole detents (the fraction is carried over by
+  error diffusion, `keymap.rs::wheel_notches`), and the capture side no longer divides `REL_WHEEL`
+  by 120 (`wayland.rs`).
 - **Capture** (`linux/evdev.rs`, `linux/wayland.rs`): the kernel's `/dev/input/event*` devices are
   read directly. Key presses are exact (no acceleration), pointer motion is not.
 - **A gamepad is a mouse to the kernel.** The Xbox controller on the test device opens a
