@@ -176,8 +176,44 @@ gamepad_pointer_nodes_are_taken_away() {
         # pointer back through every node the desktop reads as a mouse.
         case "$line" in
         *"names=[]"*) echo "no node was taken over"; exit 1 ;;
-        esac'
+        esac
+        # A name is not a grab: the node has to be *held*. The count is the
+        # number of nodes the kernel gave us; it is zero when every grab was
+        # refused (the desktop keeps the stick, and the pointer is dragged
+        # back).
+        held=$(printf "%s" "$line" | grep -ao "held=[0-9]*" | head -n 1 | cut -d= -f2)
+        if [ -z "$held" ] || [ "$held" -eq 0 ]; then
+            echo "no node is actually held (held=${held:-?})"
+            exit 1
+        fi
+        echo "$held node(s) are held away from the desktop"'
 }
+
+# The release has to reach the desktop as well. The grab argument is the
+# decision itself, so a "release" that still passes a pointer is a second
+# grab: the kernel answers EBUSY and the node stays with Oink, and the
+# desktop never gets the stick back.
+gamepad_pointer_nodes_are_released_again() {
+    ssh_to '
+        log=$(ls -t "$HOME"/.local/state/oink/Logs/oink-2*.log 2>/dev/null | head -n 1)
+        if [ -z "$log" ]; then
+            echo "no agent log"
+            exit 1
+        fi
+        line=$(grep -a "手柄指针节点的独占" "$log" | grep -a "take_over=false" | tail -n 1)
+        if [ -z "$line" ]; then
+            echo "no release line in $log (the peer never gave the pointer back?)"
+            exit 1
+        fi
+        echo "$line"
+        held=$(printf "%s" "$line" | grep -ao "held=[0-9]*" | head -n 1 | cut -d= -f2)
+        if [ -n "$held" ] && [ "$held" -ne 0 ]; then
+            echo "$held node(s) are still held after the release"
+            exit 1
+        fi
+        echo "the nodes went back to the desktop"'
+}
+
 
 # The virtual pointer has to be registered, and it has to receive whole
 # scroll detents: `REL_WHEEL` is the legacy wheel, one unit is one detent.
@@ -224,6 +260,7 @@ check "the backend runs" backend_is_running
 check "the backend uses the Wayland path" backend_uses_the_wayland_path
 check "the session unit keeps the display name" session_service_keeps_the_display_name
 check "the gamepad's pointer nodes are taken away" gamepad_pointer_nodes_are_taken_away
+check "the gamepad's pointer nodes are released again" gamepad_pointer_nodes_are_released_again
 check "the virtual pointer is registered" virtual_pointer_is_registered
 check "the mode decisions settle" mode_decisions_settle
 

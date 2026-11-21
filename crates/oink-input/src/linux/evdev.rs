@@ -271,36 +271,46 @@ fn classify(name: &str, reports_motion: bool, left_button: bool, key_a: bool, vi
 ///
 /// 手柄的指针节点被桌面当成鼠标时，摇杆会和注入的指针拉扯，
 /// 光标像是被摇杆拖回原处。远端接管指针期间要独占这些节点。
-pub(crate) fn grab(device: &mut Device, on: bool) -> bool {
+pub(crate) fn grab(device: &mut Device, on: bool) -> Result<(), i32> {
     grab_with(device, on, |fd, request, argument| {
         // SAFETY: `fd` 是一台打开着的 evdev 设备；`EVIOCGRAB` 只看参数的
         // 值，不读它指向的内容。
-        unsafe { libc::ioctl(fd, request, argument) }
+        let result = unsafe { libc::ioctl(fd, request, argument) };
+        if result < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
     })
 }
 
 /// 独占（或放开）一台设备，`call` 是那一次 ioctl。
 ///
 /// 拆出接缝是为了能测参数：独占是 1，放开是 0，而不是指针。
+///
+/// 失败时把 `errno` 带出去：别人已经抓着这台设备（`EBUSY`）、参数不对
+/// （`EINVAL`）和没有权限（`EACCES`）是三种完全不同的故障，光知道
+/// "失败了"是看不出摇杆为什么还在拖光标的。
 fn grab_with(
     device: &mut Device,
     on: bool,
-    call: impl FnOnce(RawFd, libc::c_ulong, libc::c_ulong) -> libc::c_int,
-) -> bool {
+    call: impl FnOnce(RawFd, libc::c_ulong, libc::c_ulong) -> std::io::Result<()>,
+) -> Result<(), i32> {
     // 已经是目标状态就不再问内核：重复独占会回 EBUSY，
     // 而没抓过的设备也不该被"放开"（内核回 EINVAL）。
     if device.grabbed == on {
-        return true;
+        return Ok(());
     }
     let request = ioc(IOC_WRITE, EVDEV, 0x90, std::mem::size_of::<libc::c_int>() as u32);
     let argument: libc::c_ulong = if on { 1 } else { 0 };
-    let result = call(device.file.as_raw_fd(), request, argument);
-    if result < 0 {
-        return false;
+    if let Err(error) = call(device.file.as_raw_fd(), request, argument) {
+        return Err(error.raw_os_error().unwrap_or(0));
     }
     device.grabbed = on;
-    true
+    Ok(())
 }
+
+
 
 /// 读设备的能力位图。
 fn capability_bits(fd: RawFd, ev: u8, len: usize) -> Vec<u8> {
@@ -482,9 +492,9 @@ mod tests {
         let mut seen = Vec::new();
         let grabbed = grab_with(&mut device, true, |_fd, request, argument| {
             seen.push((request, argument));
-            0
+            Ok(())
         });
-        assert!(grabbed);
+        assert!(grabbed.is_ok());
         // 请求号是 `_IOW('E', 0x90, int)`，独占的参数是 1。
         assert_eq!(seen, vec![(0x4004_4590, 1)]);
         assert!(device.grabbed);
@@ -493,9 +503,9 @@ mod tests {
         let mut seen = Vec::new();
         let released = grab_with(&mut device, false, |_fd, request, argument| {
             seen.push((request, argument));
-            0
+            Ok(())
         });
-        assert!(released);
+        assert!(released.is_ok());
         assert_eq!(seen, vec![(0x4004_4590, 0)]);
         assert!(!device.grabbed);
     }
@@ -508,11 +518,11 @@ mod tests {
         let mut grab = |device: &mut Device| {
             grab_with(device, true, |_fd, _request, _argument| {
                 calls += 1;
-                0
+                Ok(())
             })
         };
-        assert!(grab(&mut device));
-        assert!(grab(&mut device));
+        assert!(grab(&mut device).is_ok());
+        assert!(grab(&mut device).is_ok());
         assert_eq!(calls, 1);
 
         // 没抓过的设备也不该被"放开"：内核回 EINVAL。
@@ -520,18 +530,23 @@ mod tests {
         let mut device = a_device();
         let released = grab_with(&mut device, false, |_fd, _request, _argument| {
             calls += 1;
-            0
+            Ok(())
         });
-        assert!(released);
+        assert!(released.is_ok());
         assert_eq!(calls, 0);
     }
 
     #[test]
-    fn a_failed_grab_is_not_remembered_as_held() {
+    fn a_failed_grab_reports_why() {
         // 内核拒绝了就不能当成抓着：否则后面"放开"会被跳过，设备留在我们手里。
+        // 失败的原因要带出来：`EBUSY` 是别人已经抓着这台设备，
+        // `EACCES` 是没有权限，两者的处置完全不同。
         let mut device = a_device();
-        let grabbed = grab_with(&mut device, true, |_fd, _request, _argument| -1);
-        assert!(!grabbed);
+        let grabbed = grab_with(&mut device, true, |_fd, _request, _argument| {
+            Err(std::io::Error::from_raw_os_error(libc::EBUSY))
+        });
+        assert_eq!(grabbed, Err(libc::EBUSY));
         assert!(!device.grabbed);
     }
+
 }

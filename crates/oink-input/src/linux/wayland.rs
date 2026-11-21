@@ -325,19 +325,23 @@ fn take_over_pointers(inner: &Arc<Inner>, take_over: bool) {
     let mut devices = lock(&inner.take_over_devices);
     let mut failed = Vec::new();
     for device in devices.iter_mut() {
-        if !evdev::grab(device, take_over) {
-            failed.push(device.name.clone());
+        if let Err(errno) = evdev::grab(device, take_over) {
+            failed.push((device.name.clone(), errno));
         }
     }
     // 独占失败不留痕迹就看不出摇杆为什么还在拖光标，所以写下来。
     // 节点的名字也写下来：手柄的鼠标节点和 SteamOS 的虚拟摇杆鼠标
     // 都要在列表里，少一个摇杆就能拖光标。
+    // 失败的原因（errno）也写下来：`EBUSY` 是别人（合成器或 SteamOS 的
+    // InputPlumber）已经抓着这台设备，`EINVAL` 是参数不对，
+    // `EACCES` 是没有权限，三者的处置完全不同。
     tracing::info!(
         take_over,
         devices = devices.len(),
         names = ?devices.iter().map(|device| device.name.clone()).collect::<Vec<_>>(),
         held = devices.iter().filter(|device| device.grabbed).count(),
-        failed = ?failed,
+        failed = ?failed.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>(),
+        errors = ?failed,
         "手柄指针节点的独占"
     );
 }
