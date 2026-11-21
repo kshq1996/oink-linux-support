@@ -26,6 +26,28 @@ Facts about the Linux login item and the republishing flow (2026-11-17):
   overlay first (`rpm-ostree uninstall oink`) and install the new file afterwards. A local RPM
   file is installed without a signature check, so `--nosignature` is not a valid option.
 
+**The handheld's session is a gamescope one, and it runs no autostart entries**
+(2026-11-21). `/etc/sddm.conf.d/zz-holo-autologin.conf` sets
+`Session=gamescope-session-ogui-steam.desktop`, so the session runs
+`gamescope-session-plus ogui-steam` with `gamescope` as the compositor. There
+is no `systemd-xdg-autostart` in that session: the XDG autostart entry the
+product writes is **never executed**, so the interface program does not start
+by itself there. The deployment therefore installs a user service
+(`~/.config/systemd/user/oink-ui.service`) that starts the installed program.
+
+- **The session's environment is what the program needs.** The compositor's
+  socket is `/run/user/1000/gamescope-0` (a desktop session names it
+  `wayland-0`), and XWayland serves `:0` and `:1` **without** an Xauthority
+  cookie. The interface program fails with "Failed to initialize GTK"
+  (tao → `gtk::rt::init`) when `WAYLAND_DISPLAY` is missing, and the backend
+  fails with "连接 X 服务器失败：$DISPLAY variable not set" when `DISPLAY`
+  is missing. The `systemd --user` environment of a gamescope session carries
+  `XDG_CURRENT_DESKTOP=gamescope` but **no** `WAYLAND_DISPLAY` and no
+  `DISPLAY`, so the program has to be started with them.
+- The service looks the socket up when it starts
+  (`ls /run/user/$(id -u)/wayland-* /run/user/$(id -u)/gamescope-[0-9]`), and
+  `Restart=on-failure` covers the ordering: the service may start before the
+  compositor exists.
 **Why:** the login item and the "the keyboard does not work" symptoms look unrelated, but both
 come from code paths that were not wired for Linux, and a republished package that does not
 install leaves the tester on the old build.
