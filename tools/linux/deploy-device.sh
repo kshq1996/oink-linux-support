@@ -151,6 +151,40 @@ cat "$entry"
 REMOTE
 }
 
+# The handheld's session is a gamescope one, and it does not run the XDG
+# autostart entries: the interface program has to be started by a user
+# service instead.
+#
+# The Wayland socket is looked up when the service starts, because its name
+# depends on the session (`gamescope-0` in a gamescope session, `wayland-0` in
+# a desktop session), and the XWayland display serves the display backend.
+register_session_service() {
+    echo "Installing the user service that starts the interface program"
+    ssh "$HOST" bash -s <<'REMOTE'
+set -e
+ui=/usr/lib/opt/oink/oink
+[ -x "$ui" ] || ui=/opt/oink/oink
+unit="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/oink-ui.service"
+mkdir -p "$(dirname "$unit")"
+cat > "$unit" <<UNIT
+[Unit]
+Description=Oink
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c 'socket=\$(ls /run/user/\$(id -u)/wayland-* /run/user/\$(id -u)/gamescope-[0-9] 2>/dev/null | head -n 1); export WAYLAND_DISPLAY=\${socket##*/}; export DISPLAY=:0; exec $ui'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+UNIT
+systemctl --user daemon-reload
+systemctl --user enable --now oink-ui.service
+systemctl --user status oink-ui.service --no-pager | head -6
+REMOTE
+}
+
 if [[ "$AFTER_REBOOT" == no ]]; then
     install_package
     if [[ "$REBOOT" == no ]]; then
@@ -164,5 +198,6 @@ fi
 
 refresh_rules
 register_login_item
+register_session_service
 
 echo "Deployed Oink $VERSION ($ARCH) to $HOST"
