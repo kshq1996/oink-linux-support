@@ -46,6 +46,25 @@ esac
 
 PACKAGE="Oink-$VERSION-linux-$ARCH.rpm"
 
+# The device's sudo asks for a password. The password can be handed over
+# through a file (`OINK_SUDO_PASSWORD_FILE`), so it never lands in a command
+# line; without it the script asks the remote sudo directly.
+SUDO_PASSWORD_FILE=${OINK_SUDO_PASSWORD_FILE:-}
+
+# Run a command on the device with root rights.
+#
+# sudo does not run the command through a shell, so the command is handed to
+# `sh -c`; that way a chain like `a && b` stays one command.
+remote_sudo() {
+    local command=$1
+    if [[ -n "$SUDO_PASSWORD_FILE" ]]; then
+        printf '%s\n' "$(cat "$SUDO_PASSWORD_FILE")" |
+            ssh "$HOST" "sudo -S -p '' sh -c $(printf '%q' "$command")"
+    else
+        ssh "$HOST" "sudo sh -c $(printf '%q' "$command")"
+    fi
+}
+
 install_package() {
     rm -rf "$WORK"
     mkdir -p "$WORK"
@@ -62,12 +81,16 @@ install_package() {
     # The running deployment was changed by hand (the binaries were copied
     # over the installed ones), and rpm-ostree refuses to build a new
     # deployment on top of a changed one without `--allow-inactive`.
-    ssh "$HOST" "sudo rpm-ostree install --allow-inactive /tmp/$PACKAGE"
+    #
+    # The old package is a layered package, and installing the new one alone
+    # conflicts with it ("cannot install both oink-0.3.6-3 and oink-0.3.6-1"),
+    # so the old one leaves in the same transaction.
+    remote_sudo "rpm-ostree install --allow-inactive --uninstall=oink /tmp/$PACKAGE"
 }
 
 reboot_into_the_new_deployment() {
     echo "Rebooting"
-    ssh "$HOST" "sudo reboot" || true
+    remote_sudo reboot || true
 
     # The device comes back on its own; wait until it answers again. A
     # reboot also restarts the device's own VPN client, so it can take a
@@ -87,36 +110,45 @@ reboot_into_the_new_deployment() {
 # the ones that were already there need the rules to run over them again.
 refresh_rules() {
     echo "Refreshing the udev rules"
-    ssh "$HOST" 'sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=input --action=change'
+    remote_sudo "udevadm control --reload && udevadm trigger --subsystem-match=input --action=change"
 
     # The package ships the rules, so the hand-made copies in /etc are
     # redundant.
     echo "Dropping the hand-made udev copies"
-    ssh "$HOST" 'sudo rm -f /etc/udev/rules.d/65-oink-input.rules /etc/udev/rules.d/99-oink-no-gamepad-mouse.rules'
+    remote_sudo "rm -f /etc/udev/rules.d/65-oink-input.rules /etc/udev/rules.d/99-oink-no-gamepad-mouse.rules"
 }
 
-# The login item has to name the installed interface program. The product
-# writes the entry itself, from the program it runs next to, so the entry is
-# registered through the installed agent rather than written by hand.
+# The login item has to name the installed interface program.
 #
-# The agent talks to the running backend, and the backend only runs once the
-# session is up (the interface program starts it), so the call is repeated
-# until it goes through.
+# The product writes the entry itself, but only from the backend that runs in
+# the desktop session; over SSH there is no session, and the backend that does
+# answer may be a development copy whose entry would point at the wrong
+# program. The product reads the entry from the file, so the file is what
+# matters: it is written here in the format the product uses.
+#
+# `rpm-ostree` moves the package's `/opt/oink` to `/usr/lib/opt/oink`, so the
+# installed program is looked up on the device.
 register_login_item() {
     echo "Pointing the login item at the installed interface program"
-    for _ in $(seq 1 40); do
-        if ssh "$HOST" bash -s <<'REMOTE'
-/usr/lib/opt/oink/oink-agent call set_launch_at_login '{"enabled":true}'
+    ssh "$HOST" bash -s <<'REMOTE'
+set -e
+entry="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/oink.desktop"
+ui=/usr/lib/opt/oink/oink
+[ -x "$ui" ] || ui=/opt/oink/oink
+mkdir -p "$(dirname "$entry")"
+cat > "$entry" <<ENTRY
+[Desktop Entry]
+Type=Application
+Name=Oink
+Exec="$ui" --autostart
+Icon=oink
+Terminal=false
+Categories=Utility;RemoteAccess;
+X-GNOME-Autostart-enabled=true
+Hidden=false
+ENTRY
+cat "$entry"
 REMOTE
-        then
-            ssh "$HOST" 'cat "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/oink.desktop"'
-            return 0
-        fi
-        echo "The backend is not up yet; retrying."
-        sleep 15
-    done
-    echo "The backend never came up; the login item was not registered." >&2
-    return 1
 }
 
 if [[ "$AFTER_REBOOT" == no ]]; then
